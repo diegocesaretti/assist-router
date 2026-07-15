@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import logging
-from typing import Literal
+from typing import Any, Literal
 from uuid import uuid4
 
 from homeassistant.components import conversation
@@ -18,8 +19,12 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import (
     CONF_DOMOTICS_AGENT,
     CONF_KEYWORDS,
+    CONF_OPENCLAW_ACK_MESSAGE,
     CONF_OPENCLAW_AGENT,
+    CONF_OPENCLAW_BACKGROUND_INSTRUCTION,
     DEFAULT_KEYWORDS,
+    DEFAULT_OPENCLAW_ACK_MESSAGE,
+    DEFAULT_OPENCLAW_BACKGROUND_INSTRUCTION,
     ROUTE_DOMOTICS,
     ROUTE_OPENCLAW,
 )
@@ -104,36 +109,155 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
             target_agent_id,
         )
 
+        if route == ROUTE_OPENCLAW:
+            acknowledgement = settings.get(
+                CONF_OPENCLAW_ACK_MESSAGE,
+                DEFAULT_OPENCLAW_ACK_MESSAGE,
+            ).strip()
+            instruction = settings.get(
+                CONF_OPENCLAW_BACKGROUND_INSTRUCTION,
+                DEFAULT_OPENCLAW_BACKGROUND_INSTRUCTION,
+            ).strip()
+
+            openclaw_text = user_input.text
+            if instruction:
+                openclaw_text = f"{openclaw_text}\n\n{instruction}"
+
+            # Fire-and-forget: close the voice pipeline immediately while
+            # OpenClaw continues working and reports the result through WhatsApp.
+            self._create_background_task(
+                self._async_process_openclaw_background(
+                    user_input=user_input,
+                    text=openclaw_text,
+                    target_agent_id=target_agent_id,
+                    conversation_id=downstream_conversation_id,
+                )
+            )
+
+            return self._speech_result(
+                user_input,
+                acknowledgement or DEFAULT_OPENCLAW_ACK_MESSAGE,
+                conversation_id=base_conversation_id,
+            )
+
+        result = await self._async_converse(
+            user_input=user_input,
+            text=user_input.text,
+            target_agent_id=target_agent_id,
+            conversation_id=downstream_conversation_id,
+        )
+        return self._wrap_downstream_result(result, base_conversation_id)
+
+    def _create_background_task(self, coroutine: Any) -> None:
+        """Schedule a background task without blocking the Assist pipeline."""
+        name = f"Assist Router OpenClaw request {self.entry.entry_id}"
+        entry_create_background_task = getattr(
+            self.entry, "async_create_background_task", None
+        )
+        if entry_create_background_task is not None:
+            entry_create_background_task(self.hass, coroutine, name)
+            return
+
+        create_background_task = getattr(
+            self.hass, "async_create_background_task", None
+        )
+        if create_background_task is not None:
+            create_background_task(coroutine, name)
+            return
+
+        # Compatibility fallback for older Home Assistant Core versions.
+        self.hass.async_create_task(coroutine, name)
+
+    async def _async_process_openclaw_background(
+        self,
+        *,
+        user_input: conversation.ConversationInput,
+        text: str,
+        target_agent_id: str,
+        conversation_id: str,
+    ) -> None:
+        """Send a request to OpenClaw and deliberately discard its HA reply."""
+        try:
+            await self._async_converse(
+                user_input=user_input,
+                text=text,
+                target_agent_id=target_agent_id,
+                conversation_id=conversation_id,
+            )
+            _LOGGER.debug("OpenClaw background request completed")
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 - background jobs must never leak errors.
+            _LOGGER.exception("OpenClaw background request failed")
+
+    async def _async_converse(
+        self,
+        *,
+        user_input: conversation.ConversationInput,
+        text: str,
+        target_agent_id: str,
+        conversation_id: str,
+    ) -> conversation.ConversationResult:
+        """Call a destination agent using parameters supported by this HA version."""
         converse_kwargs = {
             "hass": self.hass,
-            "text": user_input.text,
-            "conversation_id": downstream_conversation_id,
+            "text": text,
+            "conversation_id": conversation_id,
             "context": user_input.context,
             "language": user_input.language,
             "agent_id": target_agent_id,
             "device_id": getattr(user_input, "device_id", None),
             "satellite_id": getattr(user_input, "satellite_id", None),
-            "extra_system_prompt": getattr(user_input, "extra_system_prompt", None),
+            "extra_system_prompt": getattr(
+                user_input, "extra_system_prompt", None
+            ),
         }
 
         # Home Assistant added some async_converse parameters over time. Only
         # send arguments supported by the installed Core version.
         supported = inspect.signature(conversation.async_converse).parameters
-        result = await conversation.async_converse(
-            **{key: value for key, value in converse_kwargs.items() if key in supported}
+        return await conversation.async_converse(
+            **{
+                key: value
+                for key, value in converse_kwargs.items()
+                if key in supported
+            }
         )
 
-        result_kwargs = {
+    @staticmethod
+    def _wrap_downstream_result(
+        result: conversation.ConversationResult,
+        base_conversation_id: str,
+    ) -> conversation.ConversationResult:
+        """Return a destination response while preserving the router session ID."""
+        result_kwargs: dict[str, Any] = {
             "response": result.response,
             "conversation_id": base_conversation_id,
         }
-        result_signature = inspect.signature(conversation.ConversationResult).parameters
+        result_signature = inspect.signature(
+            conversation.ConversationResult
+        ).parameters
         if "continue_conversation" in result_signature:
             result_kwargs["continue_conversation"] = getattr(
                 result, "continue_conversation", False
             )
 
         return conversation.ConversationResult(**result_kwargs)
+
+    @staticmethod
+    def _speech_result(
+        user_input: conversation.ConversationInput,
+        message: str,
+        *,
+        conversation_id: str | None,
+    ) -> conversation.ConversationResult:
+        """Create an immediate voice response."""
+        response = intent.IntentResponse(language=user_input.language)
+        response.async_set_speech(message)
+        return conversation.ConversationResult(
+            response=response,
+            conversation_id=conversation_id,
+        )
 
     @staticmethod
     def _error_result(

@@ -4,16 +4,20 @@
     "step": {
       "user": {
         "title": "Configurar Assist Router",
-        "description": "Elegí los dos agentes y las palabras que enviarán una consulta al agente de domótica. Si ninguna coincide, la consulta irá a OpenClaw.",
+        "description": "Elegí los dos agentes, las palabras de domótica y el comportamiento en segundo plano de OpenClaw. Si ninguna palabra coincide, Home Assistant responde enseguida y deriva la tarea a OpenClaw.",
         "data": {
           "domotics_agent": "Agente de domótica",
           "openclaw_agent": "Agente OpenClaw",
-          "keywords": "Palabras de domótica"
+          "keywords": "Palabras de domótica",
+          "openclaw_ack_message": "Respuesta inmediata al derivar a OpenClaw",
+          "openclaw_background_instruction": "Instrucción de entrega para OpenClaw"
         },
         "data_description": {
           "domotics_agent": "Agente que procesará las frases que contengan al menos una palabra configurada.",
           "openclaw_agent": "Agente que procesará todas las demás frases.",
-          "keywords": "Una o varias palabras separadas por espacios, comas o líneas. La coincidencia es por palabra completa e ignora mayúsculas y tildes."
+          "keywords": "Una o varias palabras separadas por espacios, comas o líneas. La coincidencia es por palabra completa e ignora mayúsculas y tildes.",
+          "openclaw_ack_message": "Frase que Home Assistant dirá inmediatamente, sin esperar a que OpenClaw termine.",
+          "openclaw_background_instruction": "Texto agregado al pedido para indicarle a OpenClaw que procese la tarea y entregue el resultado por WhatsApp."
         }
       }
     },
@@ -22,6 +26,8 @@
       "agent_not_found": "El agente seleccionado ya no está disponible.",
       "recursive_agent": "Assist Router no puede seleccionarse como su propio destino.",
       "keywords_required": "Ingresá al menos una palabra de domótica.",
+      "ack_message_required": "Ingresá una respuesta inmediata para OpenClaw.",
+      "background_instruction_required": "Ingresá la instrucción que OpenClaw debe seguir para entregar el resultado.",
       "not_enough_agents": "No hay al menos dos agentes de conversación cargados. Configurá Gemini y OpenClaw, reiniciá Home Assistant y volvé a intentar."
     },
     "abort": {
@@ -32,16 +38,20 @@
     "step": {
       "init": {
         "title": "Opciones de Assist Router",
-        "description": "Modificá los agentes de destino o la lista de palabras. Los cambios se aplican al guardar.",
+        "description": "Modificá los agentes, las palabras o los mensajes usados al derivar tareas a OpenClaw. Los cambios se aplican al guardar.",
         "data": {
           "domotics_agent": "Agente de domótica",
           "openclaw_agent": "Agente OpenClaw",
-          "keywords": "Palabras de domótica"
+          "keywords": "Palabras de domótica",
+          "openclaw_ack_message": "Respuesta inmediata al derivar a OpenClaw",
+          "openclaw_background_instruction": "Instrucción de entrega para OpenClaw"
         },
         "data_description": {
           "domotics_agent": "Destino cuando el STT contiene una palabra de la lista.",
           "openclaw_agent": "Destino cuando no hay coincidencias.",
-          "keywords": "Una palabra por línea es lo más cómodo, aunque también se aceptan espacios, comas y punto y coma."
+          "keywords": "Una palabra por línea es lo más cómodo, aunque también se aceptan espacios, comas y punto y coma.",
+          "openclaw_ack_message": "Respuesta hablada instantánea que cierra el pipeline de voz.",
+          "openclaw_background_instruction": "Instrucción añadida al final del pedido enviado en segundo plano a OpenClaw."
         }
       }
     },
@@ -50,6 +60,8 @@
       "agent_not_found": "El agente seleccionado ya no está disponible.",
       "recursive_agent": "Assist Router no puede seleccionarse como su propio destino.",
       "keywords_required": "Ingresá al menos una palabra de domótica.",
+      "ack_message_required": "Ingresá una respuesta inmediata para OpenClaw.",
+      "background_instruction_required": "Ingresá la instrucción que OpenClaw debe seguir para entregar el resultado.",
       "not_enough_agents": "No hay al menos dos agentes de conversación cargados. Configurá Gemini y OpenClaw, reiniciá Home Assistant y volvé a intentar."
     }
   }

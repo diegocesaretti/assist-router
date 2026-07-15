@@ -1,21 +1,69 @@
-# Assist Router 0.1.1
+# Assist Router para Home Assistant
 
-Agente de conversación para Home Assistant que deriva cada texto recibido por Assist:
+Integración personalizada que crea un agente de conversación frontal para Assist.
 
-- Si contiene alguna palabra clave de domótica, lo envía al agente configurado como **Domótica**.
-- Si no contiene ninguna, lo envía al agente configurado como **OpenClaw**.
+## Funcionamiento
 
-## Instalación
+1. Home Assistant realiza wake word y STT.
+2. Assist Router normaliza el texto: minúsculas y sin tildes.
+3. Busca coincidencias por **palabra completa** con la lista editable.
+4. Si hay coincidencia, delega al agente de domótica elegido y espera su respuesta normal para TTS.
+5. Si no hay coincidencia:
+   - responde inmediatamente por TTS con una frase configurable;
+   - envía el pedido a OpenClaw como tarea en segundo plano;
+   - agrega una instrucción configurable para que OpenClaw entregue el resultado por WhatsApp;
+   - descarta la respuesta tardía de OpenClaw dentro de Home Assistant, para no dejar abierto el pipeline de voz.
 
-1. Copiar la carpeta `custom_components/assist_router` dentro de `/config/custom_components/`.
-2. Reiniciar Home Assistant por completo.
-3. Ir a **Ajustes → Dispositivos y servicios → Añadir integración**.
-4. Buscar **Assist Router**.
-5. Elegir ambos agentes y editar la lista de palabras.
-6. En el pipeline principal de Assist, seleccionar el agente **Assist Router: Router**.
+El historial de ambos destinos se separa automáticamente mediante IDs de conversación distintos.
 
-## Cambio de la versión 0.1.1
+## Comportamiento predeterminado de OpenClaw
 
-Se reemplazó el selector moderno de agentes por menús desplegables clásicos. Esto corrige el formulario vacío que algunas versiones del frontend de Home Assistant mostraban con solamente el botón **Enviar**.
+Respuesta inmediata:
 
-Las coincidencias se hacen por palabra completa, sin distinguir mayúsculas ni tildes.
+> Dejame trabajar en eso y te aviso por WhatsApp.
+
+Instrucción añadida al pedido:
+
+> Esta solicitud fue delegada en segundo plano desde Home Assistant. Procesala completamente y, cuando termines, enviá el resultado al usuario por WhatsApp usando el canal configurado en OpenClaw. No dependas de que Home Assistant mantenga abierta esta conversación de voz.
+
+Para que la entrega realmente llegue por WhatsApp, la instancia de OpenClaw debe tener disponible y configurado ese canal. Assist Router solamente le agrega la instrucción; no implementa por sí mismo el envío de WhatsApp.
+
+## Instalación manual
+
+1. Descomprimir el ZIP.
+2. Copiar la carpeta `custom_components/assist_router` a `/config/custom_components/assist_router`.
+3. Reiniciar Home Assistant completamente.
+4. Si la integración ya estaba instalada, abrir **Ajustes → Dispositivos y servicios → Assist Router → Configurar** y guardar las nuevas opciones.
+5. Si es una instalación nueva, ir a **Ajustes → Dispositivos y servicios → Añadir integración** y buscar **Assist Router**.
+6. Elegir:
+   - agente de domótica;
+   - agente OpenClaw;
+   - lista de palabras;
+   - respuesta inmediata;
+   - instrucción de entrega para OpenClaw.
+7. En **Ajustes → Asistentes de voz**, seleccionar `Assist Router: Router` como agente de conversación del pipeline frontal.
+
+## Cambiar la configuración
+
+Abrir **Ajustes → Dispositivos y servicios → Assist Router → Configurar**. Se pueden cambiar los agentes, las palabras y ambos mensajes sin reinstalar la integración.
+
+## Lista inicial
+
+Incluye términos como `luz`, `aire`, `calefaccion`, `temperatura`, `persiana`, `riego`, `prender`, `apagar`, `abrir` y `cerrar`.
+
+## Detalles del filtro
+
+- `lámpara`, `Lampara` y `LAMPARA` coinciden con `lampara`.
+- `luz` coincide con `prendé la luz`.
+- `luz` no coincide con una parte interna de otra palabra.
+- Solo se manejan palabras; no hay frases, reglas combinadas ni clasificación con IA.
+
+## Registro de errores
+
+Si OpenClaw falla después de que Home Assistant ya dio la respuesta inmediata, el error se registra como:
+
+```text
+OpenClaw background request failed
+```
+
+Ese error puede verse en **Ajustes → Sistema → Registros**.

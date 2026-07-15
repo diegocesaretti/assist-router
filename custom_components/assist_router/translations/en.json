@@ -4,16 +4,20 @@
     "step": {
       "user": {
         "title": "Configure Assist Router",
-        "description": "Choose both destination agents and the words that route a request to the home-automation agent. Requests without a match go to OpenClaw.",
+        "description": "Choose both agents, the home-automation words, and OpenClaw background behavior. When no word matches, Home Assistant replies immediately and delegates the task to OpenClaw.",
         "data": {
           "domotics_agent": "Home-automation agent",
           "openclaw_agent": "OpenClaw agent",
-          "keywords": "Home-automation words"
+          "keywords": "Home-automation words",
+          "openclaw_ack_message": "Immediate OpenClaw acknowledgement",
+          "openclaw_background_instruction": "OpenClaw delivery instruction"
         },
         "data_description": {
           "domotics_agent": "Processes text containing at least one configured word.",
           "openclaw_agent": "Processes all other text.",
-          "keywords": "Words separated by spaces, commas or lines. Matching uses complete words and ignores case and accents."
+          "keywords": "Words separated by spaces, commas or lines. Matching uses complete words and ignores case and accents.",
+          "openclaw_ack_message": "Sentence Home Assistant speaks immediately without waiting for OpenClaw.",
+          "openclaw_background_instruction": "Text appended to the request telling OpenClaw to process it and deliver the result through WhatsApp."
         }
       }
     },
@@ -22,6 +26,8 @@
       "agent_not_found": "The selected agent is no longer available.",
       "recursive_agent": "Assist Router cannot be selected as its own destination.",
       "keywords_required": "Enter at least one home-automation word.",
+      "ack_message_required": "Enter an immediate OpenClaw acknowledgement.",
+      "background_instruction_required": "Enter the instruction OpenClaw should follow to deliver the result.",
       "not_enough_agents": "At least two conversation agents must be loaded. Configure Gemini and OpenClaw, restart Home Assistant, and try again."
     },
     "abort": {
@@ -32,16 +38,20 @@
     "step": {
       "init": {
         "title": "Assist Router options",
-        "description": "Change either destination agent or the word list. Changes apply after saving.",
+        "description": "Change the agents, keywords, or messages used when delegating work to OpenClaw. Changes apply after saving.",
         "data": {
           "domotics_agent": "Home-automation agent",
           "openclaw_agent": "OpenClaw agent",
-          "keywords": "Home-automation words"
+          "keywords": "Home-automation words",
+          "openclaw_ack_message": "Immediate OpenClaw acknowledgement",
+          "openclaw_background_instruction": "OpenClaw delivery instruction"
         },
         "data_description": {
           "domotics_agent": "Destination when STT text contains a listed word.",
           "openclaw_agent": "Destination when there is no match.",
-          "keywords": "One word per line is easiest, but spaces, commas and semicolons are also accepted."
+          "keywords": "One word per line is easiest, but spaces, commas and semicolons are also accepted.",
+          "openclaw_ack_message": "Immediate spoken reply that closes the voice pipeline.",
+          "openclaw_background_instruction": "Instruction appended to the background request sent to OpenClaw."
         }
       }
     },
@@ -50,6 +60,8 @@
       "agent_not_found": "The selected agent is no longer available.",
       "recursive_agent": "Assist Router cannot be selected as its own destination.",
       "keywords_required": "Enter at least one home-automation word.",
+      "ack_message_required": "Enter an immediate OpenClaw acknowledgement.",
+      "background_instruction_required": "Enter the instruction OpenClaw should follow to deliver the result.",
       "not_enough_agents": "At least two conversation agents must be loaded. Configure Gemini and OpenClaw, restart Home Assistant, and try again."
     }
   }

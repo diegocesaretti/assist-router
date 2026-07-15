@@ -28,7 +28,11 @@ from .const import (
     CONF_DOMOTICS_AGENT,
     CONF_KEYWORDS,
     CONF_OPENCLAW_AGENT,
+    CONF_OPENCLAW_ACK_MESSAGE,
+    CONF_OPENCLAW_BACKGROUND_INSTRUCTION,
     DEFAULT_KEYWORDS,
+    DEFAULT_OPENCLAW_ACK_MESSAGE,
+    DEFAULT_OPENCLAW_BACKGROUND_INSTRUCTION,
     DOMAIN,
 )
 from .routing import canonicalize_keywords, parse_keywords
@@ -102,6 +106,20 @@ def _schema(defaults: dict[str, Any], agent_options: dict[str, str]) -> vol.Sche
                 CONF_KEYWORDS,
                 default=defaults.get(CONF_KEYWORDS, DEFAULT_KEYWORDS),
             ): TextSelector(TextSelectorConfig(multiline=True)),
+            vol.Required(
+                CONF_OPENCLAW_ACK_MESSAGE,
+                default=defaults.get(
+                    CONF_OPENCLAW_ACK_MESSAGE,
+                    DEFAULT_OPENCLAW_ACK_MESSAGE,
+                ),
+            ): TextSelector(TextSelectorConfig(multiline=False)),
+            vol.Required(
+                CONF_OPENCLAW_BACKGROUND_INSTRUCTION,
+                default=defaults.get(
+                    CONF_OPENCLAW_BACKGROUND_INSTRUCTION,
+                    DEFAULT_OPENCLAW_BACKGROUND_INSTRUCTION,
+                ),
+            ): TextSelector(TextSelectorConfig(multiline=True)),
         }
     )
 
@@ -140,6 +158,14 @@ def _validate(
     if not parse_keywords(user_input[CONF_KEYWORDS]):
         errors[CONF_KEYWORDS] = "keywords_required"
 
+    if not user_input[CONF_OPENCLAW_ACK_MESSAGE].strip():
+        errors[CONF_OPENCLAW_ACK_MESSAGE] = "ack_message_required"
+
+    if not user_input[CONF_OPENCLAW_BACKGROUND_INSTRUCTION].strip():
+        errors[CONF_OPENCLAW_BACKGROUND_INSTRUCTION] = (
+            "background_instruction_required"
+        )
+
     return errors
 
 
@@ -174,7 +200,13 @@ class AssistRouterConfigFlow(ConfigFlow, domain=DOMAIN):
                 data[CONF_KEYWORDS] = canonicalize_keywords(data[CONF_KEYWORDS])
                 return self.async_create_entry(title="Assist Router", data=data)
 
-        defaults = user_input or {CONF_KEYWORDS: DEFAULT_KEYWORDS}
+        defaults = user_input or {
+            CONF_KEYWORDS: DEFAULT_KEYWORDS,
+            CONF_OPENCLAW_ACK_MESSAGE: DEFAULT_OPENCLAW_ACK_MESSAGE,
+            CONF_OPENCLAW_BACKGROUND_INSTRUCTION: (
+                DEFAULT_OPENCLAW_BACKGROUND_INSTRUCTION
+            ),
+        }
         return self.async_show_form(
             step_id="user",
             data_schema=_schema(defaults, agent_options),
