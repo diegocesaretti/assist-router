@@ -1,0 +1,56 @@
+{
+  "title": "Assist Router",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configure Assist Router",
+        "description": "Choose both destination agents and the words that route a request to the home-automation agent. Requests without a match go to OpenClaw.",
+        "data": {
+          "domotics_agent": "Home-automation agent",
+          "openclaw_agent": "OpenClaw agent",
+          "keywords": "Home-automation words"
+        },
+        "data_description": {
+          "domotics_agent": "Processes text containing at least one configured word.",
+          "openclaw_agent": "Processes all other text.",
+          "keywords": "Words separated by spaces, commas or lines. Matching uses complete words and ignores case and accents."
+        }
+      }
+    },
+    "error": {
+      "agents_must_differ": "The two destinations must be different agents.",
+      "agent_not_found": "The selected agent is no longer available.",
+      "recursive_agent": "Assist Router cannot be selected as its own destination.",
+      "keywords_required": "Enter at least one home-automation word.",
+      "not_enough_agents": "At least two conversation agents must be loaded. Configure Gemini and OpenClaw, restart Home Assistant, and try again."
+    },
+    "abort": {
+      "already_configured": "Assist Router is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Assist Router options",
+        "description": "Change either destination agent or the word list. Changes apply after saving.",
+        "data": {
+          "domotics_agent": "Home-automation agent",
+          "openclaw_agent": "OpenClaw agent",
+          "keywords": "Home-automation words"
+        },
+        "data_description": {
+          "domotics_agent": "Destination when STT text contains a listed word.",
+          "openclaw_agent": "Destination when there is no match.",
+          "keywords": "One word per line is easiest, but spaces, commas and semicolons are also accepted."
+        }
+      }
+    },
+    "error": {
+      "agents_must_differ": "The two destinations must be different agents.",
+      "agent_not_found": "The selected agent is no longer available.",
+      "recursive_agent": "Assist Router cannot be selected as its own destination.",
+      "keywords_required": "Enter at least one home-automation word.",
+      "not_enough_agents": "At least two conversation agents must be loaded. Configure Gemini and OpenClaw, restart Home Assistant, and try again."
+    }
+  }
+}
