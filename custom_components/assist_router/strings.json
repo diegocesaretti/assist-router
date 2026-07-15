@@ -4,20 +4,30 @@
     "step": {
       "user": {
         "title": "Configurar Assist Router",
-        "description": "Elegí los dos agentes, las palabras de domótica y el comportamiento en segundo plano de OpenClaw. Si ninguna palabra coincide, Home Assistant responde enseguida y deriva la tarea a OpenClaw.",
+        "description": "Elegí los agentes, el filtro de domótica, el comportamiento de OpenClaw y la navegación visual de View Assist.",
         "data": {
           "domotics_agent": "Agente de domótica",
           "openclaw_agent": "Agente OpenClaw",
           "keywords": "Palabras de domótica",
           "openclaw_ack_message": "Respuesta inmediata al derivar a OpenClaw",
-          "openclaw_background_instruction": "Instrucción de entrega para OpenClaw"
+          "openclaw_background_instruction": "Instrucción de entrega para OpenClaw",
+          "view_assist_enabled": "Abrir vistas de View Assist",
+          "view_assist_entity": "Satélite View Assist",
+          "view_rules": "Categorías de respuesta y vistas",
+          "view_revert_timeout": "Segundos antes de volver a la vista anterior",
+          "openclaw_view_path": "Vista mientras trabaja OpenClaw"
         },
         "data_description": {
-          "domotics_agent": "Agente que procesará las frases que contengan al menos una palabra configurada.",
-          "openclaw_agent": "Agente que procesará todas las demás frases.",
-          "keywords": "Una o varias palabras separadas por espacios, comas o líneas. La coincidencia es por palabra completa e ignora mayúsculas y tildes.",
-          "openclaw_ack_message": "Frase que Home Assistant dirá inmediatamente, sin esperar a que OpenClaw termine.",
-          "openclaw_background_instruction": "Texto agregado al pedido para indicarle a OpenClaw que procese la tarea y entregue el resultado por WhatsApp."
+          "domotics_agent": "Agente que procesa las frases que contienen una palabra del filtro.",
+          "openclaw_agent": "Agente que procesa las demás frases.",
+          "keywords": "Palabras separadas por espacios, comas o líneas. La coincidencia es por palabra completa e ignora mayúsculas y tildes.",
+          "openclaw_ack_message": "Frase que Home Assistant dice inmediatamente sin esperar a OpenClaw.",
+          "openclaw_background_instruction": "Texto agregado al pedido para que OpenClaw termine la tarea y entregue el resultado por WhatsApp.",
+          "view_assist_enabled": "Después de la respuesta de domótica, analiza el texto hablado y abre la vista cuya categoría coincida.",
+          "view_assist_entity": "Automático usa el satélite que originó la conversación. Elegí uno fijo como respaldo si tu dispositivo no informa su ID.",
+          "view_rules": "Una regla por línea: categoria | /view-assist/ruta | palabra1, palabra2. Se evalúan de arriba hacia abajo sobre la respuesta final.",
+          "view_revert_timeout": "Usá 0 para no solicitar retorno automático. View Assist admite hasta 120 segundos.",
+          "openclaw_view_path": "Ruta que se abre al derivar una tarea en segundo plano. Dejá el campo vacío para no cambiar de vista."
         }
       }
     },
@@ -28,6 +38,8 @@
       "keywords_required": "Ingresá al menos una palabra de domótica.",
       "ack_message_required": "Ingresá una respuesta inmediata para OpenClaw.",
       "background_instruction_required": "Ingresá la instrucción que OpenClaw debe seguir para entregar el resultado.",
+      "invalid_view_rules": "Revisá las categorías. Cada línea debe tener: categoria | /ruta | palabras.",
+      "invalid_view_path": "La ruta debe comenzar con / o quedar vacía.",
       "not_enough_agents": "No hay al menos dos agentes de conversación cargados. Configurá Gemini y OpenClaw, reiniciá Home Assistant y volvé a intentar."
     },
     "abort": {
@@ -38,20 +50,30 @@
     "step": {
       "init": {
         "title": "Opciones de Assist Router",
-        "description": "Modificá los agentes, las palabras o los mensajes usados al derivar tareas a OpenClaw. Los cambios se aplican al guardar.",
+        "description": "Modificá los agentes, las palabras, OpenClaw y las categorías visuales. Los cambios se aplican al guardar.",
         "data": {
           "domotics_agent": "Agente de domótica",
           "openclaw_agent": "Agente OpenClaw",
           "keywords": "Palabras de domótica",
           "openclaw_ack_message": "Respuesta inmediata al derivar a OpenClaw",
-          "openclaw_background_instruction": "Instrucción de entrega para OpenClaw"
+          "openclaw_background_instruction": "Instrucción de entrega para OpenClaw",
+          "view_assist_enabled": "Abrir vistas de View Assist",
+          "view_assist_entity": "Satélite View Assist",
+          "view_rules": "Categorías de respuesta y vistas",
+          "view_revert_timeout": "Segundos antes de volver a la vista anterior",
+          "openclaw_view_path": "Vista mientras trabaja OpenClaw"
         },
         "data_description": {
-          "domotics_agent": "Destino cuando el STT contiene una palabra de la lista.",
+          "domotics_agent": "Destino cuando el STT contiene una palabra del filtro.",
           "openclaw_agent": "Destino cuando no hay coincidencias.",
-          "keywords": "Una palabra por línea es lo más cómodo, aunque también se aceptan espacios, comas y punto y coma.",
-          "openclaw_ack_message": "Respuesta hablada instantánea que cierra el pipeline de voz.",
-          "openclaw_background_instruction": "Instrucción añadida al final del pedido enviado en segundo plano a OpenClaw."
+          "keywords": "Una palabra por línea es lo más cómodo; también se aceptan espacios, comas y punto y coma.",
+          "openclaw_ack_message": "Respuesta hablada instantánea que libera el pipeline.",
+          "openclaw_background_instruction": "Instrucción añadida al pedido que se envía en segundo plano.",
+          "view_assist_enabled": "La categoría se elige usando las palabras presentes en la respuesta del agente de domótica.",
+          "view_assist_entity": "Automático intenta localizar el View Assist asociado al micrófono que escuchó.",
+          "view_rules": "Formato: categoria | /view-assist/ruta | palabra1, palabra2. La primera categoría que coincide gana.",
+          "view_revert_timeout": "Tiempo enviado a view_assist.navigate para volver a la vista anterior.",
+          "openclaw_view_path": "Por defecto abre /view-assist/info mientras OpenClaw procesa la tarea."
         }
       }
     },
@@ -62,6 +84,8 @@
       "keywords_required": "Ingresá al menos una palabra de domótica.",
       "ack_message_required": "Ingresá una respuesta inmediata para OpenClaw.",
       "background_instruction_required": "Ingresá la instrucción que OpenClaw debe seguir para entregar el resultado.",
+      "invalid_view_rules": "Revisá las categorías. Cada línea debe tener: categoria | /ruta | palabras.",
+      "invalid_view_path": "La ruta debe comenzar con / o quedar vacía.",
       "not_enough_agents": "No hay al menos dos agentes de conversación cargados. Configurá Gemini y OpenClaw, reiniciá Home Assistant y volvé a intentar."
     }
   }

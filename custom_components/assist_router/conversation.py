@@ -13,6 +13,7 @@ from homeassistant.components.conversation.agent_manager import async_get_agent
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import MATCH_ALL
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import intent
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -22,13 +23,25 @@ from .const import (
     CONF_OPENCLAW_ACK_MESSAGE,
     CONF_OPENCLAW_AGENT,
     CONF_OPENCLAW_BACKGROUND_INSTRUCTION,
+    CONF_OPENCLAW_VIEW_PATH,
+    CONF_VIEW_ASSIST_ENABLED,
+    CONF_VIEW_ASSIST_ENTITY,
+    CONF_VIEW_REVERT_TIMEOUT,
+    CONF_VIEW_RULES,
     DEFAULT_KEYWORDS,
     DEFAULT_OPENCLAW_ACK_MESSAGE,
     DEFAULT_OPENCLAW_BACKGROUND_INSTRUCTION,
+    DEFAULT_OPENCLAW_VIEW_PATH,
+    DEFAULT_VIEW_ASSIST_ENABLED,
+    DEFAULT_VIEW_ASSIST_ENTITY,
+    DEFAULT_VIEW_REVERT_TIMEOUT,
+    DEFAULT_VIEW_RULES,
     ROUTE_DOMOTICS,
     ROUTE_OPENCLAW,
+    VIEW_ASSIST_AUTO_ENTITY,
 )
 from .routing import matches_domotics
+from .view_routing import match_view_rule
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -96,8 +109,6 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
                 f"El agente de destino '{target_agent_id}' no está disponible.",
             )
 
-        # Keep one router-level conversation ID for the voice pipeline, but give
-        # each destination a separate history so Gemini and OpenClaw never mix.
         base_conversation_id = (
             user_input.conversation_id or f"assist_router_{uuid4().hex}"
         )
@@ -123,16 +134,27 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
             if instruction:
                 openclaw_text = f"{openclaw_text}\n\n{instruction}"
 
-            # Fire-and-forget: close the voice pipeline immediately while
-            # OpenClaw continues working and reports the result through WhatsApp.
             self._create_background_task(
                 self._async_process_openclaw_background(
                     user_input=user_input,
                     text=openclaw_text,
                     target_agent_id=target_agent_id,
                     conversation_id=downstream_conversation_id,
-                )
+                ),
+                "OpenClaw request",
             )
+
+            openclaw_view_path = settings.get(
+                CONF_OPENCLAW_VIEW_PATH,
+                DEFAULT_OPENCLAW_VIEW_PATH,
+            ).strip()
+            if openclaw_view_path:
+                self._schedule_view_assist_navigation(
+                    user_input=user_input,
+                    settings=settings,
+                    path=openclaw_view_path,
+                    category="openclaw",
+                )
 
             return self._speech_result(
                 user_input,
@@ -146,11 +168,40 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
             target_agent_id=target_agent_id,
             conversation_id=downstream_conversation_id,
         )
+
+        if settings.get(
+            CONF_VIEW_ASSIST_ENABLED,
+            DEFAULT_VIEW_ASSIST_ENABLED,
+        ):
+            response_text = self._extract_response_text(result)
+            if response_text:
+                try:
+                    rule = match_view_rule(
+                        response_text,
+                        settings.get(CONF_VIEW_RULES, DEFAULT_VIEW_RULES),
+                    )
+                except ValueError:
+                    _LOGGER.exception("Invalid View Assist response rules")
+                    rule = None
+
+                if rule is not None:
+                    self._schedule_view_assist_navigation(
+                        user_input=user_input,
+                        settings=settings,
+                        path=rule.path,
+                        category=rule.category,
+                    )
+                    _LOGGER.debug(
+                        "Matched View Assist response category %s for path %s",
+                        rule.category,
+                        rule.path,
+                    )
+
         return self._wrap_downstream_result(result, base_conversation_id)
 
-    def _create_background_task(self, coroutine: Any) -> None:
+    def _create_background_task(self, coroutine: Any, task_label: str) -> None:
         """Schedule a background task without blocking the Assist pipeline."""
-        name = f"Assist Router OpenClaw request {self.entry.entry_id}"
+        name = f"Assist Router {task_label} {self.entry.entry_id}"
         entry_create_background_task = getattr(
             self.entry, "async_create_background_task", None
         )
@@ -165,8 +216,154 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
             create_background_task(coroutine, name)
             return
 
-        # Compatibility fallback for older Home Assistant Core versions.
         self.hass.async_create_task(coroutine, name)
+
+    def _schedule_view_assist_navigation(
+        self,
+        *,
+        user_input: conversation.ConversationInput,
+        settings: dict[str, Any],
+        path: str,
+        category: str,
+    ) -> None:
+        """Navigate View Assist without delaying the spoken response."""
+        if not settings.get(
+            CONF_VIEW_ASSIST_ENABLED,
+            DEFAULT_VIEW_ASSIST_ENABLED,
+        ):
+            return
+
+        self._create_background_task(
+            self._async_navigate_view_assist(
+                user_input=user_input,
+                configured_entity=settings.get(
+                    CONF_VIEW_ASSIST_ENTITY,
+                    DEFAULT_VIEW_ASSIST_ENTITY,
+                ),
+                path=path,
+                revert_timeout=settings.get(
+                    CONF_VIEW_REVERT_TIMEOUT,
+                    DEFAULT_VIEW_REVERT_TIMEOUT,
+                ),
+            ),
+            f"View Assist navigation ({category})",
+        )
+
+    async def _async_navigate_view_assist(
+        self,
+        *,
+        user_input: conversation.ConversationInput,
+        configured_entity: str,
+        path: str,
+        revert_timeout: int,
+    ) -> None:
+        """Navigate the View Assist satellite that originated the request."""
+        try:
+            if not self.hass.services.has_service("view_assist", "navigate"):
+                _LOGGER.debug(
+                    "View Assist navigation skipped: service view_assist.navigate "
+                    "is not available"
+                )
+                return
+
+            entity_id = self._resolve_view_assist_entity(
+                user_input,
+                configured_entity,
+            )
+            if entity_id is None:
+                _LOGGER.warning(
+                    "View Assist navigation skipped: no satellite matched the "
+                    "conversation device. Select a fallback satellite in Assist "
+                    "Router options if automatic detection is unavailable."
+                )
+                return
+
+            service_data: dict[str, Any] = {
+                "device": entity_id,
+                "path": path,
+                "revert_timeout": int(revert_timeout),
+            }
+            call_kwargs: dict[str, Any] = {
+                "domain": "view_assist",
+                "service": "navigate",
+                "service_data": service_data,
+                "blocking": False,
+                "context": user_input.context,
+            }
+            supported = inspect.signature(
+                self.hass.services.async_call
+            ).parameters
+            await self.hass.services.async_call(
+                **{
+                    key: value
+                    for key, value in call_kwargs.items()
+                    if key in supported
+                }
+            )
+            _LOGGER.debug(
+                "Navigated View Assist entity %s to %s",
+                entity_id,
+                path,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 - visual feedback must not break TTS.
+            _LOGGER.exception("View Assist navigation failed for path %s", path)
+
+    def _resolve_view_assist_entity(
+        self,
+        user_input: conversation.ConversationInput,
+        configured_entity: str,
+    ) -> str | None:
+        """Resolve the View Assist sensor associated with the voice device."""
+        if configured_entity and configured_entity != VIEW_ASSIST_AUTO_ENTITY:
+            return configured_entity
+
+        registry = er.async_get(self.hass)
+        device_id = getattr(user_input, "device_id", None)
+
+        if not device_id:
+            satellite_id = getattr(user_input, "satellite_id", None)
+            if satellite_id:
+                satellite_entry = registry.async_get(satellite_id)
+                if satellite_entry is not None:
+                    device_id = satellite_entry.device_id
+                elif not satellite_id.startswith(("sensor.", "assist_satellite.")):
+                    device_id = satellite_id
+
+        view_assist_sensors: list[str] = []
+        for entry in self.hass.config_entries.async_entries("view_assist"):
+            sensor_entity_id = None
+            for entity_entry in er.async_entries_for_config_entry(
+                registry,
+                entry.entry_id,
+            ):
+                if entity_entry.domain == "sensor":
+                    sensor_entity_id = entity_entry.entity_id
+                    view_assist_sensors.append(entity_entry.entity_id)
+                    break
+
+            if not device_id or sensor_entity_id is None:
+                continue
+
+            mic_entity_id = entry.data.get("mic_device")
+            runtime_data = getattr(entry, "runtime_data", None)
+            core_data = getattr(runtime_data, "core", None)
+            mic_entity_id = getattr(core_data, "mic_device", None) or mic_entity_id
+
+            if not mic_entity_id:
+                continue
+            mic_entity = registry.async_get(mic_entity_id)
+            if mic_entity is not None and mic_entity.device_id == device_id:
+                return sensor_entity_id
+
+        # A single-satellite setup is unambiguous even when the pipeline did not
+        # provide a device_id (for example, some browser-based microphones).
+        unique_sensors = list(dict.fromkeys(view_assist_sensors))
+        if len(unique_sensors) == 1:
+            return unique_sensors[0]
+
+        return None
 
     async def _async_process_openclaw_background(
         self,
@@ -213,8 +410,6 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
             ),
         }
 
-        # Home Assistant added some async_converse parameters over time. Only
-        # send arguments supported by the installed Core version.
         supported = inspect.signature(conversation.async_converse).parameters
         return await conversation.async_converse(
             **{
@@ -223,6 +418,53 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
                 if key in supported
             }
         )
+
+    @staticmethod
+    def _extract_response_text(result: conversation.ConversationResult) -> str:
+        """Extract the final plain speech from old and new IntentResponse shapes."""
+        response = result.response
+        as_dict = getattr(response, "as_dict", None)
+        if callable(as_dict):
+            try:
+                response_data = as_dict()
+                text = AssistRouterConversationEntity._find_speech_text(
+                    response_data.get("speech")
+                    if isinstance(response_data, dict)
+                    else response_data
+                )
+                if text:
+                    return text
+            except (AttributeError, TypeError, ValueError):
+                pass
+
+        return AssistRouterConversationEntity._find_speech_text(
+            getattr(response, "speech", None)
+        )
+
+    @staticmethod
+    def _find_speech_text(value: Any) -> str:
+        """Recursively find a speech string in an IntentResponse structure."""
+        if isinstance(value, str):
+            return value.strip()
+        if isinstance(value, dict):
+            preferred_keys = ("plain", "speech", "text", "ssml")
+            for preferred_key in preferred_keys:
+                for key, nested in value.items():
+                    key_value = getattr(key, "value", key)
+                    if str(key_value).casefold() == preferred_key:
+                        text = AssistRouterConversationEntity._find_speech_text(nested)
+                        if text:
+                            return text
+            for nested in value.values():
+                text = AssistRouterConversationEntity._find_speech_text(nested)
+                if text:
+                    return text
+        if isinstance(value, (list, tuple)):
+            for nested in value:
+                text = AssistRouterConversationEntity._find_speech_text(nested)
+                if text:
+                    return text
+        return ""
 
     @staticmethod
     def _wrap_downstream_result(

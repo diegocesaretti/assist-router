@@ -1,4 +1,4 @@
-"""Standalone smoke test for immediate OpenClaw acknowledgement behavior."""
+"""Standalone smoke tests for background routing and View Assist navigation."""
 
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ import types
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-# Minimal Home Assistant stubs so the integration can be smoke-tested without
-# installing the full Home Assistant package.
+# Minimal Home Assistant stubs so the integration can be tested without the
+# full Home Assistant package.
 homeassistant = types.ModuleType("homeassistant")
 sys.modules["homeassistant"] = homeassistant
 
@@ -83,8 +83,11 @@ async def async_converse(
     )
     if agent_id == "openclaw":
         await asyncio.sleep(0.05)
+        speech = "La tarea de OpenClaw terminó"
+    else:
+        speech = "La luz del living quedó encendida"
     response = IntentResponse(language)
-    response.async_set_speech(f"respuesta de {agent_id}")
+    response.async_set_speech(speech)
     return ConversationResult(response, conversation_id)
 
 
@@ -109,6 +112,14 @@ class ConfigEntry:
             "domotics_agent": "gemini",
             "openclaw_agent": "openclaw",
             "keywords": "luz\naire",
+            "view_assist_enabled": True,
+            "view_assist_entity": "__auto__",
+            "view_rules": (
+                "domotica|/view-assist/intent|luz, encendida, apagada\n"
+                "clima|/view-assist/weather|clima, lluvia"
+            ),
+            "view_revert_timeout": 20,
+            "openclaw_view_path": "/view-assist/info",
         }
         self.options = {}
 
@@ -119,10 +130,8 @@ const = types.ModuleType("homeassistant.const")
 sys.modules["homeassistant.const"] = const
 const.MATCH_ALL = "*"
 
-
 class Platform:
     CONVERSATION = "conversation"
-
 
 const.Platform = Platform
 
@@ -148,11 +157,14 @@ class IntentResponse:
         self.error = None
 
     def async_set_speech(self, message):
-        self.speech = message
+        self.speech = {"plain": {"speech": message}}
 
     def async_set_error(self, code, message):
         self.error = (code, message)
-        self.speech = message
+        self.speech = {"plain": {"speech": message}}
+
+    def as_dict(self):
+        return {"speech": self.speech}
 
 
 intent.IntentResponse = IntentResponse
@@ -162,14 +174,87 @@ entity_platform = types.ModuleType("homeassistant.helpers.entity_platform")
 sys.modules["homeassistant.helpers.entity_platform"] = entity_platform
 entity_platform.AddEntitiesCallback = object
 
+entity_registry = types.ModuleType("homeassistant.helpers.entity_registry")
+sys.modules["homeassistant.helpers.entity_registry"] = entity_registry
+helpers.entity_registry = entity_registry
+
+
+@dataclass
+class RegistryEntry:
+    entity_id: str
+    domain: str
+    device_id: str | None = None
+
+
+class FakeRegistry:
+    def __init__(self):
+        self.entries = {
+            "assist_satellite.kitchen": RegistryEntry(
+                "assist_satellite.kitchen", "assist_satellite", "device-kitchen"
+            ),
+            "sensor.viewassist_kitchen": RegistryEntry(
+                "sensor.viewassist_kitchen", "sensor", "view-device-kitchen"
+            ),
+        }
+
+    def async_get(self, entity_id):
+        return self.entries.get(entity_id)
+
+
+REGISTRY = FakeRegistry()
+entity_registry.async_get = lambda hass: REGISTRY
+entity_registry.async_entries_for_config_entry = lambda registry, entry_id: (
+    [REGISTRY.entries["sensor.viewassist_kitchen"]]
+    if entry_id == "va-entry"
+    else []
+)
+
 from custom_components.assist_router.conversation import (  # noqa: E402
     AssistRouterConversationEntity,
 )
 
 
+class FakeVAEntry:
+    entry_id = "va-entry"
+    data = {"mic_device": "assist_satellite.kitchen"}
+    runtime_data = None
+
+
+class FakeConfigEntries:
+    def async_entries(self, domain):
+        return [FakeVAEntry()] if domain == "view_assist" else []
+
+
+class FakeServices:
+    def __init__(self):
+        self.calls = []
+
+    def has_service(self, domain, service):
+        return domain == "view_assist" and service == "navigate"
+
+    async def async_call(
+        self,
+        domain,
+        service,
+        service_data=None,
+        blocking=False,
+        context=None,
+    ):
+        self.calls.append(
+            {
+                "domain": domain,
+                "service": service,
+                "service_data": service_data,
+                "blocking": blocking,
+            }
+        )
+
+
 class FakeHass:
     def __init__(self):
         self.tasks = []
+        self.services = FakeServices()
+        self.config_entries = FakeConfigEntries()
 
     def async_create_background_task(self, coroutine, name):
         task = asyncio.create_task(coroutine, name=name)
@@ -189,26 +274,45 @@ async def main():
     router.entity_id = "conversation.assist_router"
 
     openclaw_result = await router.async_process(
-        ConversationInput(text="Revisame los correos")
+        ConversationInput(
+            text="Revisame los correos",
+            device_id="device-kitchen",
+        )
     )
-    assert (
-        openclaw_result.response.speech
-        == "Dejame trabajar en eso y te aviso por WhatsApp."
+    assert router._extract_response_text(openclaw_result) == (
+        "Dejame trabajar en eso y te aviso por WhatsApp."
     )
-    assert len(hass.tasks) == 1
-    assert not hass.tasks[0].done(), "OpenClaw task should still be running"
+    assert len(hass.tasks) == 2  # OpenClaw plus View Assist navigation.
+    assert any(not task.done() for task in hass.tasks)
 
     await asyncio.gather(*hass.tasks)
     assert CALLS[-1]["agent_id"] == "openclaw"
     assert "enviá el resultado al usuario por WhatsApp" in CALLS[-1]["text"]
-
-    domotics_result = await router.async_process(
-        ConversationInput(text="Prendé la luz")
+    assert hass.services.calls[-1]["service_data"]["path"] == "/view-assist/info"
+    assert hass.services.calls[-1]["service_data"]["device"] == (
+        "sensor.viewassist_kitchen"
     )
-    assert domotics_result.response.speech == "respuesta de gemini"
+
+    previous_task_count = len(hass.tasks)
+    domotics_result = await router.async_process(
+        ConversationInput(
+            text="Prendé la luz",
+            device_id="device-kitchen",
+        )
+    )
+    assert router._extract_response_text(domotics_result) == (
+        "La luz del living quedó encendida"
+    )
     assert CALLS[-1]["agent_id"] == "gemini"
 
-    print("Background routing smoke tests: OK")
+    new_tasks = hass.tasks[previous_task_count:]
+    await asyncio.gather(*new_tasks)
+    assert hass.services.calls[-1]["service_data"]["path"] == (
+        "/view-assist/intent"
+    )
+    assert hass.services.calls[-1]["service_data"]["revert_timeout"] == 20
+
+    print("Background routing and View Assist smoke tests: OK")
 
 
 asyncio.run(main())

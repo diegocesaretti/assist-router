@@ -4,20 +4,30 @@
     "step": {
       "user": {
         "title": "Configure Assist Router",
-        "description": "Choose both agents, the home-automation words, and OpenClaw background behavior. When no word matches, Home Assistant replies immediately and delegates the task to OpenClaw.",
+        "description": "Choose both agents, the home-automation filter, OpenClaw behavior, and View Assist visual navigation.",
         "data": {
           "domotics_agent": "Home-automation agent",
           "openclaw_agent": "OpenClaw agent",
           "keywords": "Home-automation words",
           "openclaw_ack_message": "Immediate OpenClaw acknowledgement",
-          "openclaw_background_instruction": "OpenClaw delivery instruction"
+          "openclaw_background_instruction": "OpenClaw delivery instruction",
+          "view_assist_enabled": "Open View Assist views",
+          "view_assist_entity": "View Assist satellite",
+          "view_rules": "Response categories and views",
+          "view_revert_timeout": "Seconds before returning to the previous view",
+          "openclaw_view_path": "View shown while OpenClaw works"
         },
         "data_description": {
-          "domotics_agent": "Processes text containing at least one configured word.",
-          "openclaw_agent": "Processes all other text.",
-          "keywords": "Words separated by spaces, commas or lines. Matching uses complete words and ignores case and accents.",
+          "domotics_agent": "Processes phrases containing a listed home-automation word.",
+          "openclaw_agent": "Processes all other phrases.",
+          "keywords": "Words separated by spaces, commas, or lines. Matching uses complete words and ignores case and accents.",
           "openclaw_ack_message": "Sentence Home Assistant speaks immediately without waiting for OpenClaw.",
-          "openclaw_background_instruction": "Text appended to the request telling OpenClaw to process it and deliver the result through WhatsApp."
+          "openclaw_background_instruction": "Text appended to the request so OpenClaw completes it and delivers the result through WhatsApp.",
+          "view_assist_enabled": "After the home-automation response, analyzes the spoken text and opens the matching View Assist category.",
+          "view_assist_entity": "Automatic uses the satellite that started the conversation. Select a fixed fallback if the device ID is unavailable.",
+          "view_rules": "One rule per line: category | /view-assist/path | word1, word2. Rules are evaluated top to bottom against the final response.",
+          "view_revert_timeout": "Use 0 to avoid requesting an automatic return. View Assist supports up to 120 seconds.",
+          "openclaw_view_path": "Path opened when a background task is delegated. Leave empty to keep the current view."
         }
       }
     },
@@ -28,6 +38,8 @@
       "keywords_required": "Enter at least one home-automation word.",
       "ack_message_required": "Enter an immediate OpenClaw acknowledgement.",
       "background_instruction_required": "Enter the instruction OpenClaw should follow to deliver the result.",
+      "invalid_view_rules": "Review the categories. Each line must contain: category | /path | words.",
+      "invalid_view_path": "The path must begin with / or be left empty.",
       "not_enough_agents": "At least two conversation agents must be loaded. Configure Gemini and OpenClaw, restart Home Assistant, and try again."
     },
     "abort": {
@@ -38,20 +50,30 @@
     "step": {
       "init": {
         "title": "Assist Router options",
-        "description": "Change the agents, keywords, or messages used when delegating work to OpenClaw. Changes apply after saving.",
+        "description": "Change the agents, words, OpenClaw behavior, and visual categories. Changes apply after saving.",
         "data": {
           "domotics_agent": "Home-automation agent",
           "openclaw_agent": "OpenClaw agent",
           "keywords": "Home-automation words",
           "openclaw_ack_message": "Immediate OpenClaw acknowledgement",
-          "openclaw_background_instruction": "OpenClaw delivery instruction"
+          "openclaw_background_instruction": "OpenClaw delivery instruction",
+          "view_assist_enabled": "Open View Assist views",
+          "view_assist_entity": "View Assist satellite",
+          "view_rules": "Response categories and views",
+          "view_revert_timeout": "Seconds before returning to the previous view",
+          "openclaw_view_path": "View shown while OpenClaw works"
         },
         "data_description": {
-          "domotics_agent": "Destination when STT text contains a listed word.",
-          "openclaw_agent": "Destination when there is no match.",
-          "keywords": "One word per line is easiest, but spaces, commas and semicolons are also accepted.",
-          "openclaw_ack_message": "Immediate spoken reply that closes the voice pipeline.",
-          "openclaw_background_instruction": "Instruction appended to the background request sent to OpenClaw."
+          "domotics_agent": "Destination when STT contains a listed word.",
+          "openclaw_agent": "Destination when no word matches.",
+          "keywords": "One word per line is easiest; spaces, commas, and semicolons are also accepted.",
+          "openclaw_ack_message": "Immediate spoken reply that releases the voice pipeline.",
+          "openclaw_background_instruction": "Instruction appended to the background request.",
+          "view_assist_enabled": "The category is chosen from words found in the home-automation agent's response.",
+          "view_assist_entity": "Automatic tries to find the View Assist entity linked to the microphone that heard the request.",
+          "view_rules": "Format: category | /view-assist/path | word1, word2. The first matching category wins.",
+          "view_revert_timeout": "Timeout passed to view_assist.navigate for returning to the previous view.",
+          "openclaw_view_path": "Defaults to /view-assist/info while OpenClaw processes the task."
         }
       }
     },
@@ -62,6 +84,8 @@
       "keywords_required": "Enter at least one home-automation word.",
       "ack_message_required": "Enter an immediate OpenClaw acknowledgement.",
       "background_instruction_required": "Enter the instruction OpenClaw should follow to deliver the result.",
+      "invalid_view_rules": "Review the categories. Each line must contain: category | /path | words.",
+      "invalid_view_path": "The path must begin with / or be left empty.",
       "not_enough_agents": "At least two conversation agents must be loaded. Configure Gemini and OpenClaw, restart Home Assistant, and try again."
     }
   }
