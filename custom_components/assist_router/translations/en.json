@@ -36,24 +36,28 @@
       },
       "view_assist": {
         "title": "View Assist general settings",
-        "description": "Choose the satellite and visual sequence: show the written reply first, then the related view.",
+        "description": "Written-response time is calculated automatically from the word count, then the related view opens.",
         "data": {
           "view_assist_enabled": "Enable View Assist navigation",
           "view_assist_entity": "View Assist satellite",
           "view_response_enabled": "Show written response",
           "view_response_path": "Response display view",
-          "view_response_display_time": "Written response seconds",
           "view_related_display_time": "Related view seconds",
-          "view_navigation_delay": "Delay before opening the view"
+          "view_navigation_delay": "Delay before opening the view",
+          "view_response_min_time": "Minimum written-response time",
+          "view_response_seconds_per_word": "Seconds per word",
+          "view_response_max_time": "Maximum written-response time"
         },
         "data_description": {
           "view_assist_enabled": "Open a view related to the final answer.",
           "view_assist_entity": "Automatic uses the satellite that originated the conversation.",
           "view_response_enabled": "Shows the agent response as text before opening the category view.",
           "view_response_path": "Use a relative name such as 'info' or a full path.",
-          "view_response_display_time": "How long the written response remains visible. Recommended: 3 seconds.",
           "view_related_display_time": "How long the weather, camera, domotics, or other related view remains visible. Use 0 to disable automatic return.",
-          "view_navigation_delay": "Initial delay so View Assist can finish the pipeline state transition. Recommended: 0.8 seconds."
+          "view_navigation_delay": "Initial delay so View Assist can finish the pipeline state transition. Recommended: 0.8 seconds.",
+          "view_response_min_time": "Short replies are never shown for less than this time. Recommended: 3 seconds.",
+          "view_response_seconds_per_word": "Controls how display time grows with reply length. Recommended: 0.35 seconds per word.",
+          "view_response_max_time": "Prevents very long replies from remaining too long. Recommended: 20 seconds."
         }
       },
       "general": {
@@ -81,7 +85,8 @@
       "not_enough_agents": "At least three conversation agents must be loaded. Configure domotics, a general agent, and OpenClaw, restart Home Assistant, and try again.",
       "end_phrases_required": "Enter at least one phrase that closes the conversation.",
       "general_openclaw_must_differ": "The general agent cannot be the same as the OpenClaw agent.",
-      "general_instruction_required": "Enter criteria that tell the general agent when to route to OpenClaw."
+      "general_instruction_required": "Enter criteria that tell the general agent when to route to OpenClaw.",
+      "response_max_before_min": "Maximum time must be equal to or greater than minimum time."
     },
     "abort": {
       "already_configured": "Assist Router is already configured."
@@ -110,6 +115,110 @@
       },
       "routing": {
         "title": "Three agents and domotics filter",
+        "description": "Choose to edit this section or return to the main menu.",
+        "menu_options": {
+          "edit_routing": "Edit settings",
+          "init": "← Back"
+        }
+      },
+      "openclaw": {
+        "title": "OpenClaw",
+        "description": "Choose to edit this section or return to the main menu.",
+        "menu_options": {
+          "edit_openclaw": "Edit settings",
+          "init": "← Back"
+        }
+      },
+      "view_assist": {
+        "title": "View Assist: general settings",
+        "description": "Choose to edit this section or return to the main menu.",
+        "menu_options": {
+          "edit_view_assist": "Edit settings",
+          "init": "← Back"
+        }
+      },
+      "view_weather": {
+        "title": "Weather and forecast",
+        "description": "Choose to edit this view or return to the main menu.",
+        "menu_options": {
+          "edit_view_weather": "Edit view",
+          "init": "← Back"
+        }
+      },
+      "view_climate": {
+        "title": "Climate control",
+        "description": "Choose to edit this view or return to the main menu.",
+        "menu_options": {
+          "edit_view_climate": "Edit view",
+          "init": "← Back"
+        }
+      },
+      "view_camera": {
+        "title": "Cameras",
+        "description": "Choose to edit this view or return to the main menu.",
+        "menu_options": {
+          "edit_view_camera": "Edit view",
+          "init": "← Back"
+        }
+      },
+      "view_alarm": {
+        "title": "Alarms and reminders",
+        "description": "Choose to edit this view or return to the main menu.",
+        "menu_options": {
+          "edit_view_alarm": "Edit view",
+          "init": "← Back"
+        }
+      },
+      "view_music": {
+        "title": "Music and media",
+        "description": "Choose to edit this view or return to the main menu.",
+        "menu_options": {
+          "edit_view_music": "Edit view",
+          "init": "← Back"
+        }
+      },
+      "view_list": {
+        "title": "Lists and tasks",
+        "description": "Choose to edit this view or return to the main menu.",
+        "menu_options": {
+          "edit_view_list": "Edit view",
+          "init": "← Back"
+        }
+      },
+      "view_sports": {
+        "title": "Sports",
+        "description": "Choose to edit this view or return to the main menu.",
+        "menu_options": {
+          "edit_view_sports": "Edit view",
+          "init": "← Back"
+        }
+      },
+      "view_domotics": {
+        "title": "General home control",
+        "description": "Choose to edit this view or return to the main menu.",
+        "menu_options": {
+          "edit_view_domotics": "Edit view",
+          "init": "← Back"
+        }
+      },
+      "conversation": {
+        "title": "Conversation ending",
+        "description": "Choose to edit this section or return to the main menu.",
+        "menu_options": {
+          "edit_conversation": "Edit settings",
+          "init": "← Back"
+        }
+      },
+      "general": {
+        "title": "General-agent classifier",
+        "description": "Choose to edit this section or return to the main menu.",
+        "menu_options": {
+          "edit_general": "Edit settings",
+          "init": "← Back"
+        }
+      },
+      "edit_routing": {
+        "title": "Three agents and domotics filter",
         "description": "Keywords keep domotics on the fast route. Everything else goes to the general agent first.",
         "data": {
           "domotics_agent": "Domotics agent",
@@ -124,7 +233,33 @@
           "keywords": "One word per line. Matching ignores accents and case."
         }
       },
-      "openclaw": {
+      "edit_general": {
+        "title": "General-agent classifier",
+        "description": "Adjust routing criteria without changing the router’s technical protocol.",
+        "data": {
+          "general_router_instruction": "Criteria for routing to OpenClaw",
+          "force_openclaw_phrases": "Phrases that force OpenClaw"
+        },
+        "data_description": {
+          "general_router_instruction": "Describe requests that need email, files, the PC, WhatsApp, external accounts, or long-running work. When uncertain, the general agent should answer itself.",
+          "force_openclaw_phrases": "One phrase per line. Matching ignores accents and case and may occur inside a sentence."
+        }
+      },
+      "edit_conversation": {
+        "title": "Conversation ending",
+        "description": "These phrases end a follow-up conversation without being sent to Gemini or OpenClaw.",
+        "data": {
+          "end_phrases": "Closing phrases",
+          "end_response": "Closing response",
+          "end_view_home": "Return to the home view"
+        },
+        "data_description": {
+          "end_phrases": "One phrase per line. The whole utterance is matched while ignoring case, accents, and punctuation.",
+          "end_response": "May be left blank to end without spoken feedback.",
+          "end_view_home": "Open the home screen on the same View Assist satellite when closing."
+        }
+      },
+      "edit_openclaw": {
         "title": "OpenClaw",
         "description": "Immediate reply, delivery instruction, and processing view.",
         "data": {
@@ -140,29 +275,33 @@
           "view_openclaw_path": "Relative name or full path."
         }
       },
-      "view_assist": {
+      "edit_view_assist": {
         "title": "View Assist: general settings",
-        "description": "Choose the satellite and visual sequence: show the written reply first, then the related view.",
+        "description": "Written-response time is calculated automatically from the word count, then the related view opens.",
         "data": {
           "view_assist_enabled": "Enable View Assist navigation",
           "view_assist_entity": "View Assist satellite",
           "view_response_enabled": "Show written response",
           "view_response_path": "Response display view",
-          "view_response_display_time": "Written response seconds",
           "view_related_display_time": "Related view seconds",
-          "view_navigation_delay": "Delay before opening the view"
+          "view_navigation_delay": "Delay before opening the view",
+          "view_response_min_time": "Minimum written-response time",
+          "view_response_seconds_per_word": "Seconds per word",
+          "view_response_max_time": "Maximum written-response time"
         },
         "data_description": {
           "view_assist_enabled": "Disable to keep spoken responses only.",
           "view_assist_entity": "Automatic uses the originating satellite.",
           "view_response_enabled": "Shows the agent response as text before opening the category view.",
           "view_response_path": "Use a relative name such as 'info' or a full path.",
-          "view_response_display_time": "How long the written response remains visible. Recommended: 3 seconds.",
           "view_related_display_time": "How long the weather, camera, domotics, or other related view remains visible. Use 0 to disable automatic return.",
-          "view_navigation_delay": "Initial delay so View Assist can finish the pipeline state transition. Recommended: 0.8 seconds."
+          "view_navigation_delay": "Initial delay so View Assist can finish the pipeline state transition. Recommended: 0.8 seconds.",
+          "view_response_min_time": "Short replies are never shown for less than this time. Recommended: 3 seconds.",
+          "view_response_seconds_per_word": "Controls how display time grows with reply length. Recommended: 0.35 seconds per word.",
+          "view_response_max_time": "Prevents very long replies from remaining too long. Recommended: 20 seconds."
         }
       },
-      "view_weather": {
+      "edit_view_weather": {
         "title": "Weather and forecast",
         "description": "Configure only the weather and forecast view.",
         "data": {
@@ -176,7 +315,7 @@
           "view_weather_keywords": "One word per line. The response is checked first and the original request is used as fallback."
         }
       },
-      "view_climate": {
+      "edit_view_climate": {
         "title": "Climate control",
         "description": "Configure only the climate control view.",
         "data": {
@@ -190,7 +329,7 @@
           "view_climate_keywords": "One word per line. The response is checked first and the original request is used as fallback."
         }
       },
-      "view_camera": {
+      "edit_view_camera": {
         "title": "Cameras",
         "description": "Configure only the cameras view.",
         "data": {
@@ -204,7 +343,7 @@
           "view_camera_keywords": "One word per line. The response is checked first and the original request is used as fallback."
         }
       },
-      "view_alarm": {
+      "edit_view_alarm": {
         "title": "Alarms and reminders",
         "description": "Configure only the alarms and reminders view.",
         "data": {
@@ -218,7 +357,7 @@
           "view_alarm_keywords": "One word per line. The response is checked first and the original request is used as fallback."
         }
       },
-      "view_music": {
+      "edit_view_music": {
         "title": "Music and media",
         "description": "Configure only the music and media view.",
         "data": {
@@ -232,7 +371,7 @@
           "view_music_keywords": "One word per line. The response is checked first and the original request is used as fallback."
         }
       },
-      "view_list": {
+      "edit_view_list": {
         "title": "Lists and tasks",
         "description": "Configure only the lists and tasks view.",
         "data": {
@@ -246,7 +385,7 @@
           "view_list_keywords": "One word per line. The response is checked first and the original request is used as fallback."
         }
       },
-      "view_sports": {
+      "edit_view_sports": {
         "title": "Sports",
         "description": "Configure only the sports view.",
         "data": {
@@ -260,7 +399,7 @@
           "view_sports_keywords": "One word per line. The response is checked first and the original request is used as fallback."
         }
       },
-      "view_domotics": {
+      "edit_view_domotics": {
         "title": "General home control",
         "description": "Configure only the general home control view.",
         "data": {
@@ -272,32 +411,6 @@
           "view_domotics_enabled": "Disable if this view is not installed.",
           "view_domotics_path": "Use a relative view name or a full path starting with /.",
           "view_domotics_keywords": "One word per line. The response is checked first and the original request is used as fallback."
-        }
-      },
-      "conversation": {
-        "title": "Conversation ending",
-        "description": "These phrases end a follow-up conversation without being sent to Gemini or OpenClaw.",
-        "data": {
-          "end_phrases": "Closing phrases",
-          "end_response": "Closing response",
-          "end_view_home": "Return to the home view"
-        },
-        "data_description": {
-          "end_phrases": "One phrase per line. The whole utterance is matched while ignoring case, accents, and punctuation.",
-          "end_response": "May be left blank to end without spoken feedback.",
-          "end_view_home": "Open the home screen on the same View Assist satellite when closing."
-        }
-      },
-      "general": {
-        "title": "General-agent classifier",
-        "description": "Adjust routing criteria without changing the router’s technical protocol.",
-        "data": {
-          "general_router_instruction": "Criteria for routing to OpenClaw",
-          "force_openclaw_phrases": "Phrases that force OpenClaw"
-        },
-        "data_description": {
-          "general_router_instruction": "Describe requests that need email, files, the PC, WhatsApp, external accounts, or long-running work. When uncertain, the general agent should answer itself.",
-          "force_openclaw_phrases": "One phrase per line. Matching ignores accents and case and may occur inside a sentence."
         }
       }
     },
@@ -312,7 +425,8 @@
       "view_keywords_required": "Enter at least one keyword for this view or disable it.",
       "not_enough_agents": "At least three conversation agents must be loaded. Configure domotics, a general agent, and OpenClaw, restart Home Assistant, and try again.",
       "general_openclaw_must_differ": "The general agent cannot be the same as the OpenClaw agent.",
-      "general_instruction_required": "Enter criteria that tell the general agent when to route to OpenClaw."
+      "general_instruction_required": "Enter criteria that tell the general agent when to route to OpenClaw.",
+      "response_max_before_min": "Maximum time must be equal to or greater than minimum time."
     }
   }
 }

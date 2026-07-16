@@ -211,6 +211,21 @@ def resolve_view_path(configured_path: str, entity_state: Any | None) -> str:
     return f"{base_path.rstrip('/')}/{path.lstrip('/')}"
 
 
+def calculate_response_display_time(
+    text: str,
+    minimum_seconds: float,
+    seconds_per_word: float,
+    maximum_seconds: float,
+) -> float:
+    """Return a bounded reading time based on the written response length."""
+    minimum = max(0.0, float(minimum_seconds))
+    maximum = max(minimum, float(maximum_seconds))
+    rate = max(0.0, float(seconds_per_word))
+    word_count = max(1, len(text.split()))
+    calculated = word_count * rate
+    return max(minimum, min(maximum, calculated))
+
+
 def _legacy_rule_lines(value: str) -> list[tuple[str, str, str]]:
     """Parse legacy 0.1.x rules leniently for automatic migration."""
     rules: list[tuple[str, str, str]] = []

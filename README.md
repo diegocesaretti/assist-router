@@ -1,4 +1,4 @@
-# Assist Router 0.3.0 para Home Assistant
+# Assist Router 0.3.1 para Home Assistant
 
 Agente frontal para Assist con tres destinos: domótica, consultas generales rápidas y OpenClaw en segundo plano. Mantiene la integración con View Assist, el cierre de conversación y la entrega de tareas largas por WhatsApp.
 
@@ -92,14 +92,33 @@ Respuesta del agente
         ↓
 Demora inicial, predeterminado 0,8 s
         ↓
-Vista info + respuesta escrita, predeterminado 3 s
+Vista info + respuesta escrita
+        ↓
+Tiempo calculado por cantidad de palabras
         ↓
 Vista relacionada, predeterminado 4 s
         ↓
 Retorno de View Assist
 ```
 
+El tiempo de lectura usa estos valores predeterminados:
+
+- Mínimo: 3 segundos.
+- Velocidad: 0,35 segundos por palabra.
+- Máximo: 20 segundos.
+
+La fórmula respeta siempre el mínimo y el máximo. Una respuesta de 20 palabras queda visible 7 segundos; una respuesta corta conserva 3 segundos.
+
 Las rutas pueden ser relativas, por ejemplo `info`, `weather`, `camera`, `music` o `intent`, o absolutas como `/view-assist/info`.
+
+## Navegación de configuración
+
+Cada sección de **Configurar** ahora abre un menú intermedio con:
+
+- **Editar configuración** o **Editar vista**.
+- **← Volver** al menú principal.
+
+Al guardar un formulario, los cambios se aplican y se vuelve automáticamente al menú principal, para seguir editando otras secciones sin cerrar y abrir la integración.
 
 ## Frases de cierre
 

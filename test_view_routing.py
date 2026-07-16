@@ -88,3 +88,8 @@ assert "lluvia" in migrated["view_weather_keywords"]
 assert migrated["view_openclaw_path"] == "/custom/info"
 
 print("Per-view routing tests: OK")
+
+# Written-response time scales with word count and respects configured bounds.
+assert view_routing.calculate_response_display_time("Listo", 3, 0.35, 20) == 3
+assert view_routing.calculate_response_display_time(" ".join(["palabra"] * 20), 3, 0.35, 20) == 7
+assert view_routing.calculate_response_display_time(" ".join(["palabra"] * 200), 3, 0.35, 20) == 20

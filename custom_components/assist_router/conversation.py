@@ -39,6 +39,9 @@ from .const import (
     CONF_RESPONSE_VIEW_ENABLED,
     CONF_RESPONSE_VIEW_PATH,
     CONF_RESPONSE_DISPLAY_TIME,
+    CONF_RESPONSE_DISPLAY_MIN_TIME,
+    CONF_RESPONSE_SECONDS_PER_WORD,
+    CONF_RESPONSE_DISPLAY_MAX_TIME,
     CONF_RELATED_VIEW_DISPLAY_TIME,
     DEFAULT_END_PHRASES,
     DEFAULT_END_RESPONSE,
@@ -57,6 +60,9 @@ from .const import (
     DEFAULT_RESPONSE_VIEW_ENABLED,
     DEFAULT_RESPONSE_VIEW_PATH,
     DEFAULT_RESPONSE_DISPLAY_TIME,
+    DEFAULT_RESPONSE_DISPLAY_MIN_TIME,
+    DEFAULT_RESPONSE_SECONDS_PER_WORD,
+    DEFAULT_RESPONSE_DISPLAY_MAX_TIME,
     DEFAULT_RELATED_VIEW_DISPLAY_TIME,
     LEGACY_DEFAULT_KEYWORDS_0_1_3,
     OPENCLAW_ROUTE_MARKER,
@@ -72,7 +78,12 @@ from .routing import (
     migrate_default_keywords,
     normalize_phrase,
 )
-from .view_routing import apply_legacy_view_settings, match_view, resolve_view_path
+from .view_routing import (
+    apply_legacy_view_settings,
+    calculate_response_display_time,
+    match_view,
+    resolve_view_path,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -445,9 +456,20 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
                     )
                 ).strip(),
                 response_text=clean_response,
-                response_display_time=settings.get(
-                    CONF_RESPONSE_DISPLAY_TIME,
-                    DEFAULT_RESPONSE_DISPLAY_TIME,
+                response_display_min_time=settings.get(
+                    CONF_RESPONSE_DISPLAY_MIN_TIME,
+                    settings.get(
+                        CONF_RESPONSE_DISPLAY_TIME,
+                        DEFAULT_RESPONSE_DISPLAY_MIN_TIME,
+                    ),
+                ),
+                response_seconds_per_word=settings.get(
+                    CONF_RESPONSE_SECONDS_PER_WORD,
+                    DEFAULT_RESPONSE_SECONDS_PER_WORD,
+                ),
+                response_display_max_time=settings.get(
+                    CONF_RESPONSE_DISPLAY_MAX_TIME,
+                    DEFAULT_RESPONSE_DISPLAY_MAX_TIME,
                 ),
                 related_path=clean_related_path,
                 related_display_time=settings.get(
@@ -470,7 +492,9 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
         response_enabled: bool,
         response_path: str,
         response_text: str,
-        response_display_time: float,
+        response_display_min_time: float,
+        response_seconds_per_word: float,
+        response_display_max_time: float,
         related_path: str | None,
         related_display_time: int,
         navigation_delay: float,
@@ -501,7 +525,12 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
 
             entity_state = self.hass.states.get(entity_id)
             shown_response = False
-            response_seconds = max(0.0, min(float(response_display_time), 30.0))
+            response_seconds = calculate_response_display_time(
+                response_text,
+                response_display_min_time,
+                response_seconds_per_word,
+                response_display_max_time,
+            )
             related_seconds = max(0, min(int(related_display_time), 120))
 
             if response_enabled and response_text and response_path:
@@ -535,10 +564,11 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
                         )
                         shown_response = True
                         _LOGGER.info(
-                            "Showing written response on %s at %s for %.1fs",
+                            "Showing written response on %s at %s for %.1fs (%s words)",
                             entity_id,
                             resolved_response_path,
                             response_seconds,
+                            len(response_text.split()),
                         )
                     else:
                         _LOGGER.warning(

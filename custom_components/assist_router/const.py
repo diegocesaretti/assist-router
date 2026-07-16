@@ -21,7 +21,10 @@ CONF_VIEW_REVERT_TIMEOUT = "view_revert_timeout"
 CONF_VIEW_NAVIGATION_DELAY = "view_navigation_delay"
 CONF_RESPONSE_VIEW_ENABLED = "view_response_enabled"
 CONF_RESPONSE_VIEW_PATH = "view_response_path"
-CONF_RESPONSE_DISPLAY_TIME = "view_response_display_time"
+CONF_RESPONSE_DISPLAY_TIME = "view_response_display_time"  # Legacy fixed-duration key.
+CONF_RESPONSE_DISPLAY_MIN_TIME = "view_response_min_time"
+CONF_RESPONSE_SECONDS_PER_WORD = "view_response_seconds_per_word"
+CONF_RESPONSE_DISPLAY_MAX_TIME = "view_response_max_time"
 CONF_RELATED_VIEW_DISPLAY_TIME = "view_related_display_time"
 
 # Legacy keys retained only so existing 0.1.x installations can be migrated.
@@ -153,7 +156,10 @@ DEFAULT_VIEW_REVERT_TIMEOUT = 20  # Legacy option retained for compatibility.
 DEFAULT_VIEW_NAVIGATION_DELAY = 0.8
 DEFAULT_RESPONSE_VIEW_ENABLED = True
 DEFAULT_RESPONSE_VIEW_PATH = "info"
-DEFAULT_RESPONSE_DISPLAY_TIME = 3.0
+DEFAULT_RESPONSE_DISPLAY_TIME = 3.0  # Legacy fallback for upgrades.
+DEFAULT_RESPONSE_DISPLAY_MIN_TIME = 3.0
+DEFAULT_RESPONSE_SECONDS_PER_WORD = 0.35
+DEFAULT_RESPONSE_DISPLAY_MAX_TIME = 20.0
 DEFAULT_RELATED_VIEW_DISPLAY_TIME = 4
 DEFAULT_OPENCLAW_VIEW_ENABLED = True
 DEFAULT_OPENCLAW_VIEW_PATH = "info"

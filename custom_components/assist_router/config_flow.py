@@ -43,6 +43,9 @@ from .const import (
     CONF_RESPONSE_VIEW_ENABLED,
     CONF_RESPONSE_VIEW_PATH,
     CONF_RESPONSE_DISPLAY_TIME,
+    CONF_RESPONSE_DISPLAY_MIN_TIME,
+    CONF_RESPONSE_SECONDS_PER_WORD,
+    CONF_RESPONSE_DISPLAY_MAX_TIME,
     CONF_RELATED_VIEW_DISPLAY_TIME,
     CONF_VIEW_RULES,
     DEFAULT_END_PHRASES,
@@ -62,6 +65,9 @@ from .const import (
     DEFAULT_RESPONSE_VIEW_ENABLED,
     DEFAULT_RESPONSE_VIEW_PATH,
     DEFAULT_RESPONSE_DISPLAY_TIME,
+    DEFAULT_RESPONSE_DISPLAY_MIN_TIME,
+    DEFAULT_RESPONSE_SECONDS_PER_WORD,
+    DEFAULT_RESPONSE_DISPLAY_MAX_TIME,
     DEFAULT_RELATED_VIEW_DISPLAY_TIME,
     DOMAIN,
     LEGACY_DEFAULT_KEYWORDS_0_1_3,
@@ -170,6 +176,16 @@ def _effective_settings(entry: ConfigEntry) -> dict[str, Any]:
         LEGACY_DEFAULT_KEYWORDS_0_1_3,
         DEFAULT_KEYWORDS,
     )
+    legacy_response_time = settings.get(
+        CONF_RESPONSE_DISPLAY_TIME, DEFAULT_RESPONSE_DISPLAY_TIME
+    )
+    settings.setdefault(CONF_RESPONSE_DISPLAY_MIN_TIME, legacy_response_time)
+    settings.setdefault(
+        CONF_RESPONSE_SECONDS_PER_WORD, DEFAULT_RESPONSE_SECONDS_PER_WORD
+    )
+    settings.setdefault(
+        CONF_RESPONSE_DISPLAY_MAX_TIME, DEFAULT_RESPONSE_DISPLAY_MAX_TIME
+    )
     return settings
 
 
@@ -190,6 +206,9 @@ def _base_defaults() -> dict[str, Any]:
         CONF_RESPONSE_VIEW_ENABLED: DEFAULT_RESPONSE_VIEW_ENABLED,
         CONF_RESPONSE_VIEW_PATH: DEFAULT_RESPONSE_VIEW_PATH,
         CONF_RESPONSE_DISPLAY_TIME: DEFAULT_RESPONSE_DISPLAY_TIME,
+        CONF_RESPONSE_DISPLAY_MIN_TIME: DEFAULT_RESPONSE_DISPLAY_MIN_TIME,
+        CONF_RESPONSE_SECONDS_PER_WORD: DEFAULT_RESPONSE_SECONDS_PER_WORD,
+        CONF_RESPONSE_DISPLAY_MAX_TIME: DEFAULT_RESPONSE_DISPLAY_MAX_TIME,
         CONF_RELATED_VIEW_DISPLAY_TIME: DEFAULT_RELATED_VIEW_DISPLAY_TIME,
         CONF_OPENCLAW_VIEW_ENABLED: DEFAULT_OPENCLAW_VIEW_ENABLED,
         CONF_OPENCLAW_VIEW_PATH_V2: DEFAULT_OPENCLAW_VIEW_PATH,
@@ -371,11 +390,28 @@ def _view_assist_schema(
                 ),
             ): TextSelector(TextSelectorConfig(multiline=False)),
             vol.Required(
-                CONF_RESPONSE_DISPLAY_TIME,
+                CONF_RESPONSE_DISPLAY_MIN_TIME,
                 default=defaults.get(
-                    CONF_RESPONSE_DISPLAY_TIME, DEFAULT_RESPONSE_DISPLAY_TIME
+                    CONF_RESPONSE_DISPLAY_MIN_TIME,
+                    defaults.get(
+                        CONF_RESPONSE_DISPLAY_TIME, DEFAULT_RESPONSE_DISPLAY_MIN_TIME
+                    ),
                 ),
-            ): vol.All(vol.Coerce(float), vol.Range(min=0, max=30)),
+            ): vol.All(vol.Coerce(float), vol.Range(min=0, max=60)),
+            vol.Required(
+                CONF_RESPONSE_SECONDS_PER_WORD,
+                default=defaults.get(
+                    CONF_RESPONSE_SECONDS_PER_WORD,
+                    DEFAULT_RESPONSE_SECONDS_PER_WORD,
+                ),
+            ): vol.All(vol.Coerce(float), vol.Range(min=0.05, max=3)),
+            vol.Required(
+                CONF_RESPONSE_DISPLAY_MAX_TIME,
+                default=defaults.get(
+                    CONF_RESPONSE_DISPLAY_MAX_TIME,
+                    DEFAULT_RESPONSE_DISPLAY_MAX_TIME,
+                ),
+            ): vol.All(vol.Coerce(float), vol.Range(min=0, max=120)),
             vol.Required(
                 CONF_RELATED_VIEW_DISPLAY_TIME,
                 default=defaults.get(
@@ -399,6 +435,11 @@ def _validate_view_assist(user_input: dict[str, Any]) -> dict[str, str]:
         user_input[CONF_RESPONSE_VIEW_PATH]
     ):
         errors[CONF_RESPONSE_VIEW_PATH] = "invalid_view_path"
+    if (
+        user_input[CONF_RESPONSE_DISPLAY_MAX_TIME]
+        < user_input[CONF_RESPONSE_DISPLAY_MIN_TIME]
+    ):
+        errors[CONF_RESPONSE_DISPLAY_MAX_TIME] = "response_max_before_min"
     return errors
 
 
@@ -620,24 +661,44 @@ class AssistRouterConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class AssistRouterOptionsFlow(OptionsFlow):
-    """Edit one logical section at a time through a clear options menu."""
+    """Edit logical sections through menus with explicit back navigation."""
 
     def __init__(self, config_entry: ConfigEntry) -> None:
         self._entry = config_entry
 
-    def _save(self, changes: dict[str, Any]) -> ConfigFlowResult:
+    def _merged_settings(self, changes: dict[str, Any]) -> dict[str, Any]:
+        """Return normalized settings after applying a partial edit."""
         settings = _effective_settings(self._entry)
         settings.update(changes)
         settings.pop(CONF_VIEW_RULES, None)
         settings.pop(CONF_OPENCLAW_VIEW_PATH, None)
         settings.pop(CONF_VIEW_REVERT_TIMEOUT, None)
-        settings = canonicalize_view_settings(settings)
-        return self.async_create_entry(title="", data=settings)
+        return canonicalize_view_settings(settings)
+
+    async def _save_and_return(self, changes: dict[str, Any]) -> ConfigFlowResult:
+        """Persist changes immediately and return to the main options menu."""
+        settings = self._merged_settings(changes)
+        self.hass.config_entries.async_update_entry(
+            self._entry,
+            options=settings,
+        )
+        return await self.async_step_init()
+
+    def _show_section_menu(
+        self,
+        step_id: str,
+        edit_step_id: str,
+    ) -> ConfigFlowResult:
+        """Show an Edit/Back menu for one settings section."""
+        return self.async_show_menu(
+            step_id=step_id,
+            menu_options=[edit_step_id, "init"],
+        )
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Show a section menu instead of one oversized form."""
+        """Show the main options menu."""
         return self.async_show_menu(
             step_id="init",
             menu_options=[
@@ -653,6 +714,11 @@ class AssistRouterOptionsFlow(OptionsFlow):
     async def async_step_routing(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        return self._show_section_menu("routing", "edit_routing")
+
+    async def async_step_edit_routing(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         forbidden = _own_agent_ids(self.hass, self._entry)
         agents = _agent_options(self.hass, forbidden)
         errors: dict[str, str] = {}
@@ -661,24 +727,30 @@ class AssistRouterOptionsFlow(OptionsFlow):
         if user_input is not None:
             errors = _validate_routing(self.hass, user_input, forbidden)
             if not errors:
-                return self._save(_normalize_routing(user_input))
+                return await self._save_and_return(_normalize_routing(user_input))
         return self.async_show_form(
-            step_id="routing",
-            data_schema=_routing_schema(user_input or _effective_settings(self._entry), agents),
+            step_id="edit_routing",
+            data_schema=_routing_schema(
+                user_input or _effective_settings(self._entry), agents
+            ),
             errors=errors,
         )
 
     async def async_step_general(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Configure the general agent classifier policy."""
+        return self._show_section_menu("general", "edit_general")
+
+    async def async_step_edit_general(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
             errors = _validate_general(user_input)
             if not errors:
-                return self._save(_normalize_general(user_input))
+                return await self._save_and_return(_normalize_general(user_input))
         return self.async_show_form(
-            step_id="general",
+            step_id="edit_general",
             data_schema=_general_schema(
                 user_input or _effective_settings(self._entry)
             ),
@@ -688,14 +760,20 @@ class AssistRouterOptionsFlow(OptionsFlow):
     async def async_step_conversation(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Configure phrases that explicitly close a follow-up conversation."""
+        return self._show_section_menu("conversation", "edit_conversation")
+
+    async def async_step_edit_conversation(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
             errors = _validate_conversation(user_input)
             if not errors:
-                return self._save(_normalize_conversation(user_input))
+                return await self._save_and_return(
+                    _normalize_conversation(user_input)
+                )
         return self.async_show_form(
-            step_id="conversation",
+            step_id="edit_conversation",
             data_schema=_conversation_schema(
                 user_input or _effective_settings(self._entry)
             ),
@@ -705,27 +783,41 @@ class AssistRouterOptionsFlow(OptionsFlow):
     async def async_step_openclaw(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        return self._show_section_menu("openclaw", "edit_openclaw")
+
+    async def async_step_edit_openclaw(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
             errors = _validate_openclaw(user_input)
             if not errors:
-                return self._save(_normalize_openclaw(user_input))
+                return await self._save_and_return(_normalize_openclaw(user_input))
         return self.async_show_form(
-            step_id="openclaw",
-            data_schema=_openclaw_schema(user_input or _effective_settings(self._entry)),
+            step_id="edit_openclaw",
+            data_schema=_openclaw_schema(
+                user_input or _effective_settings(self._entry)
+            ),
             errors=errors,
         )
 
     async def async_step_view_assist(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        return self._show_section_menu("view_assist", "edit_view_assist")
+
+    async def async_step_edit_view_assist(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
             errors = _validate_view_assist(user_input)
             if not errors:
-                return self._save(_normalize_view_assist(user_input))
+                return await self._save_and_return(
+                    _normalize_view_assist(user_input)
+                )
         return self.async_show_form(
-            step_id="view_assist",
+            step_id="edit_view_assist",
             data_schema=_view_assist_schema(
                 user_input or _effective_settings(self._entry),
                 _view_assist_entity_options(self.hass),
@@ -734,10 +826,25 @@ class AssistRouterOptionsFlow(OptionsFlow):
         )
 
 
-def _make_view_step(slug: str):
-    """Create one options-flow step per view without duplicated logic."""
+def _make_view_menu_step(slug: str):
+    """Create one Edit/Back menu per visual category."""
 
-    async def async_step_view(
+    async def async_step_view_menu(
+        self: AssistRouterOptionsFlow,
+        user_input: dict[str, Any] | None = None,
+    ) -> ConfigFlowResult:
+        return self._show_section_menu(
+            f"view_{slug}",
+            f"edit_view_{slug}",
+        )
+
+    return async_step_view_menu
+
+
+def _make_view_edit_step(slug: str):
+    """Create one editable form per visual category."""
+
+    async def async_step_view_edit(
         self: AssistRouterOptionsFlow,
         user_input: dict[str, Any] | None = None,
     ) -> ConfigFlowResult:
@@ -745,21 +852,28 @@ def _make_view_step(slug: str):
         if user_input is not None:
             errors = _validate_view(user_input, slug)
             if not errors:
-                return self._save(_normalize_view(user_input, slug))
+                return await self._save_and_return(
+                    _normalize_view(user_input, slug)
+                )
         return self.async_show_form(
-            step_id=f"view_{slug}",
+            step_id=f"edit_view_{slug}",
             data_schema=_view_schema(
                 user_input or _effective_settings(self._entry), slug
             ),
             errors=errors,
         )
 
-    return async_step_view
+    return async_step_view_edit
 
 
 for _definition in VIEW_DEFINITIONS:
     setattr(
         AssistRouterOptionsFlow,
         f"async_step_view_{_definition.slug}",
-        _make_view_step(_definition.slug),
+        _make_view_menu_step(_definition.slug),
+    )
+    setattr(
+        AssistRouterOptionsFlow,
+        f"async_step_edit_view_{_definition.slug}",
+        _make_view_edit_step(_definition.slug),
     )
