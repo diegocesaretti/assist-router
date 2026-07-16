@@ -250,11 +250,30 @@ class FakeServices:
         )
 
 
+class FakeState:
+    def __init__(self, attributes=None):
+        self.attributes = attributes or {}
+        self.name = "View Assist Kitchen"
+
+
+class FakeStates:
+    def get(self, entity_id):
+        if entity_id == "sensor.viewassist_kitchen":
+            return FakeState({
+                "dashboard": "/view-assist",
+                "mic_device": "assist_satellite.kitchen",
+                "mic_device_id": "device-kitchen",
+                "voice_device_id": "device-kitchen",
+            })
+        return None
+
+
 class FakeHass:
     def __init__(self):
         self.tasks = []
         self.services = FakeServices()
         self.config_entries = FakeConfigEntries()
+        self.states = FakeStates()
 
     def async_create_background_task(self, coroutine, name):
         task = asyncio.create_task(coroutine, name=name)

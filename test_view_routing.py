@@ -1,4 +1,6 @@
-"""Standalone tests for response-to-view classification."""
+"""Standalone tests for the per-view routing model."""
+
+from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
@@ -8,7 +10,6 @@ import types
 ROOT = Path(__file__).parent
 PACKAGE_ROOT = ROOT / "custom_components" / "assist_router"
 
-# Load the package modules without importing Home Assistant.
 package = types.ModuleType("custom_components.assist_router")
 package.__path__ = [str(PACKAGE_ROOT)]
 sys.modules["custom_components.assist_router"] = package
@@ -23,32 +24,67 @@ for module_name in ("routing", "view_routing"):
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
 
-a = sys.modules["custom_components.assist_router.view_routing"]
+view_routing = sys.modules["custom_components.assist_router.view_routing"]
 
-rules = """clima|/view-assist/weather|clima, lluvia, nublado
-termostato|/view-assist/thermostat|aire, calefacción, termostato
-domotica|/view-assist/intent|luz, persiana, encendida, apagada"""
+settings = view_routing.view_defaults()
 
-match = a.match_view_rule("Está nublado y puede llover", rules)
-assert match and match.category == "clima"
-assert match.path == "/view-assist/weather"
+# The final response takes priority.
+match = view_routing.match_view(
+    "Está nublado y hay probabilidad de lluvia",
+    "Decime cómo está afuera",
+    settings,
+)
+assert match and match.slug == "weather"
+assert "lluvia" in match.response_hits
 
-match = a.match_view_rule("Dejé la luz encendida", rules)
-assert match and match.category == "domotica"
+# Terse responses fall back to the original STT request.
+match = view_routing.match_view(
+    "Listo",
+    "Prendé la luz del living",
+    settings,
+)
+assert match and match.slug == "domotics"
+assert "luz" in match.request_hits
 
-match = a.match_view_rule("Encendí la calefaccion", rules)
-assert match and match.category == "termostato"
+# Disabled optional views do not steal a match.
+match = view_routing.match_view(
+    "La calefacción quedó en 22 grados",
+    "Subí la calefacción",
+    settings,
+)
+assert match is None
+settings["view_climate_enabled"] = True
+match = view_routing.match_view(
+    "La calefacción quedó en 22 grados",
+    "Subí la calefacción",
+    settings,
+)
+assert match and match.slug == "climate"
 
-assert a.match_view_rule("Listo, tarea completada", rules) is None
+# Relative paths use the actual dashboard base advertised by the satellite.
+class State:
+    attributes = {"dashboard": "/panel-cocina"}
 
-canonical = a.canonicalize_view_rules(rules)
-assert "calefaccion" in canonical
+assert view_routing.resolve_view_path("weather", State()) == "/panel-cocina/weather"
+assert (
+    view_routing.resolve_view_path("/view-assist/camera", State())
+    == "/view-assist/camera"
+)
 
-try:
-    a.parse_view_rules("regla sin separadores")
-except ValueError:
-    pass
-else:
-    raise AssertionError("Invalid rules should raise ValueError")
+class HomeState:
+    attributes = {"home_screen": "/mi-dashboard/clock"}
 
-print("View routing tests: OK")
+assert view_routing.resolve_view_path("music", HomeState()) == "/mi-dashboard/music"
+
+# Legacy 0.1.x combined rules are migrated into the separate fields.
+legacy = {
+    "view_rules": "clima|/custom/weather|lluvia, nublado\n"
+    "domotica|/custom/intent|luz, encendida",
+    "openclaw_view_path": "/custom/info",
+}
+migrated = view_routing.apply_legacy_view_settings(legacy)
+assert migrated["view_weather_path"] == "/custom/weather"
+assert "lluvia" in migrated["view_weather_keywords"]
+assert migrated["view_openclaw_path"] == "/custom/info"
+
+print("Per-view routing tests: OK")

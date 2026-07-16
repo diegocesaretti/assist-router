@@ -1,109 +1,229 @@
-# Assist Router 0.1.3 para Home Assistant
+# Assist Router 0.2.0 para Home Assistant
 
-Agente frontal para Assist que deriva cada texto del STT a un agente de domótica o a OpenClaw y, cuando corresponde, abre en View Assist la vista relacionada con la respuesta final.
+Agente frontal para Assist que deriva el texto del STT a un agente de domótica o a OpenClaw. La rama doméstica puede abrir en View Assist una vista relacionada con la respuesta.
+
+## Qué cambia en 0.2.0
+
+- La configuración ya no usa el campo confuso `categoria|ruta|palabras`.
+- **Cada vista tiene su propia pantalla** con:
+  - activar o desactivar;
+  - ruta;
+  - palabras asociadas.
+- Las rutas pueden ser relativas, por ejemplo `weather`, `camera` o `intent`.
+- El router obtiene el dashboard base del satélite View Assist y arma la ruta completa automáticamente.
+- La respuesta del agente tiene prioridad para seleccionar la vista.
+- Si la respuesta es demasiado corta, por ejemplo “Listo”, se usa el texto original del STT como respaldo.
+- Se reforzó la detección del satélite mediante `device_id`, `satellite_id`, `mic_device_id`, `voice_device_id` y la entidad del micrófono.
+- La llamada a `view_assist.navigate` se realiza dentro de una tarea independiente y espera la confirmación del servicio para registrar errores reales.
+- Las configuraciones de la versión 0.1.x se convierten automáticamente al nuevo modelo al abrir las opciones.
 
 ## Flujo
 
 ```text
 STT
  └─ Assist Router
-     ├─ contiene una palabra de domótica
-     │   └─ Gemini / agente doméstico
+     ├─ contiene una palabra del filtro principal
+     │   └─ agente de domótica / Gemini
      │       ├─ devuelve la respuesta para TTS
-     │       └─ Assist Router analiza esa respuesta y abre la vista relacionada
-     └─ no contiene palabras de domótica
-         └─ responde inmediatamente y ejecuta OpenClaw en segundo plano
-             └─ abre una vista configurable de “procesando”
+     │       ├─ clasifica la respuesta
+     │       ├─ usa el STT como respaldo si la respuesta no aporta contexto
+     │       └─ abre la vista relacionada en el mismo satélite
+     └─ no contiene palabras del filtro
+         └─ responde inmediatamente
+             ├─ abre la vista de procesamiento, si está activada
+             └─ ejecuta OpenClaw en segundo plano
 ```
 
-## Novedades de la versión 0.1.3
-
-- Integración opcional con `view_assist.navigate`.
-- Detección automática del satélite View Assist que originó la conversación.
-- Menú para seleccionar un satélite fijo como respaldo.
-- Clasificación de la **respuesta final** del agente doméstico por categorías editables.
-- Ruta de View Assist configurable para cada categoría.
-- Timeout configurable para volver a la vista anterior.
-- Vista configurable mientras OpenClaw trabaja en segundo plano.
-
-## Categorías y vistas
-
-El campo **Categorías de respuesta y vistas** usa una regla por línea:
+## Lista predeterminada del filtro principal
 
 ```text
-categoria | /view-assist/ruta | palabra1, palabra2, palabra3
+luz
+luces
+lampara
+lamparas
+aire
+aires
+calor
+ventilador
+humedad
+calefaccion
+temperatura
+termostato
+persiana
+persianas
+cortina
+cortinas
+porton
+puerta
+ventana
+riego
+bomba
+enchufe
+televisor
+tele
+alarma
+camara
+extractor
+prender
+encender
+apagar
+abrir
+cerrar
+subir
+bajar
+pone
+pieza
+dormitorio
+cocina
+patio
+living
+tiempo
+clima
+recordatorio
 ```
+
+La comparación usa palabras completas, ignora mayúsculas y elimina tildes antes de comparar.
+
+## Menú de configuración
+
+Abrí:
+
+```text
+Ajustes → Dispositivos y servicios → Assist Router → Configurar
+```
+
+La pantalla principal muestra secciones independientes:
+
+- **Agentes y filtro principal**
+- **OpenClaw**
+- **View Assist: ajustes generales**
+- **Clima y tiempo**
+- **Aire y calefacción**
+- **Cámaras**
+- **Alarmas y recordatorios**
+- **Música y multimedia**
+- **Listas y tareas**
+- **Deportes**
+- **Domótica general**
+
+Cada vista tiene tres campos simples:
+
+```text
+Abrir esta vista: sí/no
+Ruta: weather
+Palabras: una por línea
+```
+
+## Rutas relativas
+
+Es recomendable escribir solo el nombre de la vista:
+
+```text
+weather
+camera
+music
+intent
+```
+
+Si el sensor View Assist informa que su dashboard es `/view-assist`, el router convierte `weather` en:
+
+```text
+/view-assist/weather
+```
+
+Si otro satélite usa `/panel-cocina`, la misma configuración se convierte en:
+
+```text
+/panel-cocina/weather
+```
+
+También se acepta una ruta absoluta, por ejemplo:
+
+```text
+/view-assist/weather
+```
+
+Las rutas absolutas se usan sin modificación.
+
+## Vistas activadas por defecto
+
+Se activan solo las vistas más comunes:
+
+- Clima y tiempo: `weather`
+- Cámaras: `camera`
+- Música y multimedia: `music`
+- Domótica general: `intent`
+- OpenClaw: `info`
+
+Las vistas opcionales quedan desactivadas hasta confirmar que existen en el dashboard:
+
+- Aire y calefacción: `thermostat`
+- Alarmas y recordatorios: `alarm`
+- Listas y tareas: `list`
+- Deportes: `sports`
+
+Esto evita navegar a páginas inexistentes.
+
+## Cómo se selecciona una vista
+
+El router suma coincidencias por categoría:
+
+1. Las palabras presentes en la **respuesta final** tienen mayor peso.
+2. Las palabras del **pedido original** sirven de respaldo.
+3. Gana la categoría con mayor cantidad de coincidencias.
+4. Las categorías desactivadas se ignoran.
 
 Ejemplo:
 
 ```text
-clima|/view-assist/weather|clima, pronostico, lluvia, soleado, nublado
-termostato|/view-assist/thermostat|aire, calefaccion, termostato, temperatura
-camara|/view-assist/camera|camara, portero, timbre
-alarma|/view-assist/alarm|alarma, temporizador, recordatorio
-domotica|/view-assist/intent|luz, persiana, puerta, ventana, encendido, apagado
+Pedido: “Prendé la luz del living”
+Respuesta: “Listo”
 ```
 
-Las reglas se evalúan de arriba hacia abajo. La primera que coincide gana. La comparación:
-
-- usa palabras completas;
-- ignora mayúsculas;
-- ignora tildes;
-- se realiza sobre el texto hablado por Gemini o el agente doméstico, no sobre el STT original.
-
-Si no coincide ninguna categoría, el router entrega la respuesta por TTS y no cambia la vista.
+Aunque la respuesta no contenga “luz”, el router usa el pedido como respaldo y abre la vista `intent`.
 
 ## OpenClaw
 
-Cuando no hay ninguna palabra de domótica:
+Cuando no hay palabras del filtro principal:
 
-1. Home Assistant dice inmediatamente la frase configurada.
-2. OpenClaw recibe el pedido en segundo plano con la instrucción adicional configurada.
-3. El pipeline de voz queda libre.
-4. View Assist abre por defecto `/view-assist/info`.
-5. OpenClaw debe entregar el resultado por WhatsApp usando su propio canal configurado.
+1. Home Assistant responde inmediatamente.
+2. El pedido se envía a OpenClaw en segundo plano.
+3. Se añade la instrucción configurada para entregar el resultado por WhatsApp.
+4. Puede abrirse una vista relativa como `info`.
 
-La ruta de OpenClaw puede dejarse vacía para no cambiar la pantalla.
+## Actualización desde 0.1.3
 
-## Selección del satélite
-
-La opción recomendada es:
+1. Descomprimí el ZIP.
+2. Reemplazá completamente:
 
 ```text
-Automático: usar el satélite que escuchó
+/config/custom_components/assist_router
 ```
 
-El router compara el `device_id` de la conversación con el micrófono configurado en cada instancia de View Assist y navega el sensor correspondiente.
+por la carpeta nueva incluida en el paquete.
 
-Si el dispositivo no entrega un `device_id`, se puede seleccionar un satélite fijo en la configuración. En instalaciones con un único satélite, el router también puede usarlo automáticamente.
+3. Reiniciá Home Assistant completamente.
+4. Entrá a **Assist Router → Configurar**.
+5. Revisá primero **View Assist: ajustes generales**.
+6. Entrá en cada vista que realmente tengas instalada y verificá su nombre de ruta.
 
-## Instalación o actualización
-
-1. Descomprimir el ZIP.
-2. Reemplazar `/config/custom_components/assist_router` por la carpeta nueva.
-3. Reiniciar Home Assistant completamente.
-4. Abrir **Ajustes → Dispositivos y servicios → Assist Router → Configurar**.
-5. Revisar:
-   - agente de domótica;
-   - agente OpenClaw;
-   - palabras del filtro;
-   - opciones de OpenClaw;
-   - activar View Assist;
-   - satélite automático o fijo;
-   - categorías y rutas;
-   - timeout de retorno.
-
-No hace falta borrar la entrada de integración existente.
+No hace falta borrar la entrada de integración ni volver a elegir los agentes.
 
 ## Diagnóstico
 
-En **Ajustes → Sistema → Registros** pueden aparecer mensajes como:
+Buscá `assist_router` en:
 
 ```text
-View Assist navigation skipped: service view_assist.navigate is not available
-View Assist navigation skipped: no satellite matched the conversation device
-View Assist navigation failed for path ...
-OpenClaw background request failed
+Ajustes → Sistema → Registros
 ```
 
-Un error visual no bloquea ni elimina la respuesta hablada.
+Los mensajes de depuración incluyen:
+
+- categoría elegida;
+- palabras coincidentes en la respuesta;
+- palabras coincidentes en el STT;
+- entidad View Assist seleccionada;
+- ruta configurada;
+- ruta final resuelta.
+
+Un error de navegación visual no interrumpe la respuesta por voz.

@@ -3,44 +3,60 @@
   "config": {
     "step": {
       "user": {
-        "title": "Configure Assist Router",
-        "description": "Choose both agents, the home-automation filter, OpenClaw behavior, and View Assist visual navigation.",
+        "title": "Agents and main filter",
+        "description": "Choose both agents and the home automation routing words.",
         "data": {
-          "domotics_agent": "Home-automation agent",
+          "domotics_agent": "Home automation agent",
           "openclaw_agent": "OpenClaw agent",
-          "keywords": "Home-automation words",
-          "openclaw_ack_message": "Immediate OpenClaw acknowledgement",
-          "openclaw_background_instruction": "OpenClaw delivery instruction",
-          "view_assist_enabled": "Open View Assist views",
-          "view_assist_entity": "View Assist satellite",
-          "view_rules": "Response categories and views",
-          "view_revert_timeout": "Seconds before returning to the previous view",
-          "openclaw_view_path": "View shown while OpenClaw works"
+          "keywords": "Home automation keywords"
         },
         "data_description": {
-          "domotics_agent": "Processes phrases containing a listed home-automation word.",
-          "openclaw_agent": "Processes all other phrases.",
-          "keywords": "Words separated by spaces, commas, or lines. Matching uses complete words and ignores case and accents.",
-          "openclaw_ack_message": "Sentence Home Assistant speaks immediately without waiting for OpenClaw.",
-          "openclaw_background_instruction": "Text appended to the request so OpenClaw completes it and delivers the result through WhatsApp.",
-          "view_assist_enabled": "After the home-automation response, analyzes the spoken text and opens the matching View Assist category.",
-          "view_assist_entity": "Automatic uses the satellite that started the conversation. Select a fixed fallback if the device ID is unavailable.",
-          "view_rules": "One rule per line: category | /view-assist/path | word1, word2. Rules are evaluated top to bottom against the final response.",
-          "view_revert_timeout": "Use 0 to avoid requesting an automatic return. View Assist supports up to 120 seconds.",
-          "openclaw_view_path": "Path opened when a background task is delegated. Leave empty to keep the current view."
+          "domotics_agent": "Handles requests matching the filter.",
+          "openclaw_agent": "Handles all other requests.",
+          "keywords": "One complete word per line; matching ignores case and accents."
+        }
+      },
+      "openclaw": {
+        "title": "OpenClaw behavior",
+        "description": "Configure the immediate reply, delivery instruction, and processing view.",
+        "data": {
+          "openclaw_ack_message": "Immediate acknowledgement",
+          "openclaw_background_instruction": "Instruction appended to the request",
+          "view_openclaw_enabled": "Open a processing view",
+          "view_openclaw_path": "OpenClaw view"
+        },
+        "data_description": {
+          "openclaw_ack_message": "Spoken without waiting for OpenClaw.",
+          "openclaw_background_instruction": "Appended to the background request.",
+          "view_openclaw_enabled": "Disable if the view is not installed.",
+          "view_openclaw_path": "Use a relative name such as info or a full path."
+        }
+      },
+      "view_assist": {
+        "title": "View Assist general settings",
+        "description": "Choose the satellite and revert timeout. Individual views can be edited later.",
+        "data": {
+          "view_assist_enabled": "Enable View Assist navigation",
+          "view_assist_entity": "View Assist satellite",
+          "view_revert_timeout": "Seconds before reverting"
+        },
+        "data_description": {
+          "view_assist_enabled": "Open a view related to the final answer.",
+          "view_assist_entity": "Automatic uses the satellite that originated the conversation.",
+          "view_revert_timeout": "Use 0 to stay on the selected view."
         }
       }
     },
     "error": {
       "agents_must_differ": "The two destinations must be different agents.",
       "agent_not_found": "The selected agent is no longer available.",
-      "recursive_agent": "Assist Router cannot be selected as its own destination.",
-      "keywords_required": "Enter at least one home-automation word.",
+      "recursive_agent": "Assist Router cannot select itself as a destination.",
+      "keywords_required": "Enter at least one home automation keyword.",
       "ack_message_required": "Enter an immediate OpenClaw acknowledgement.",
-      "background_instruction_required": "Enter the instruction OpenClaw should follow to deliver the result.",
-      "invalid_view_rules": "Review the categories. Each line must contain: category | /path | words.",
-      "invalid_view_path": "The path must begin with / or be left empty.",
-      "not_enough_agents": "At least two conversation agents must be loaded. Configure Gemini and OpenClaw, restart Home Assistant, and try again."
+      "background_instruction_required": "Enter the delivery instruction for OpenClaw.",
+      "invalid_view_path": "Use a simple name such as weather or a full path starting with /. Do not use spaces.",
+      "view_keywords_required": "Enter at least one keyword for this view or disable it.",
+      "not_enough_agents": "At least two conversation agents must be loaded."
     },
     "abort": {
       "already_configured": "Assist Router is already configured."
@@ -49,44 +65,189 @@
   "options": {
     "step": {
       "init": {
-        "title": "Assist Router options",
-        "description": "Change the agents, words, OpenClaw behavior, and visual categories. Changes apply after saving.",
+        "title": "Configure Assist Router",
+        "description": "Choose the section to edit. Each view has its own page.",
+        "menu_options": {
+          "routing": "Agents and main filter",
+          "openclaw": "OpenClaw",
+          "view_assist": "View Assist: general settings",
+          "view_weather": "Weather and forecast",
+          "view_climate": "Climate control",
+          "view_camera": "Cameras",
+          "view_alarm": "Alarms and reminders",
+          "view_music": "Music and media",
+          "view_list": "Lists and tasks",
+          "view_sports": "Sports",
+          "view_domotics": "General home control"
+        }
+      },
+      "routing": {
+        "title": "Agents and main filter",
+        "description": "These words decide whether a request goes to home automation or OpenClaw.",
         "data": {
-          "domotics_agent": "Home-automation agent",
+          "domotics_agent": "Home automation agent",
           "openclaw_agent": "OpenClaw agent",
-          "keywords": "Home-automation words",
-          "openclaw_ack_message": "Immediate OpenClaw acknowledgement",
-          "openclaw_background_instruction": "OpenClaw delivery instruction",
-          "view_assist_enabled": "Open View Assist views",
-          "view_assist_entity": "View Assist satellite",
-          "view_rules": "Response categories and views",
-          "view_revert_timeout": "Seconds before returning to the previous view",
-          "openclaw_view_path": "View shown while OpenClaw works"
+          "keywords": "Home automation keywords"
         },
         "data_description": {
-          "domotics_agent": "Destination when STT contains a listed word.",
-          "openclaw_agent": "Destination when no word matches.",
-          "keywords": "One word per line is easiest; spaces, commas, and semicolons are also accepted.",
-          "openclaw_ack_message": "Immediate spoken reply that releases the voice pipeline.",
-          "openclaw_background_instruction": "Instruction appended to the background request.",
-          "view_assist_enabled": "The category is chosen from words found in the home-automation agent's response.",
-          "view_assist_entity": "Automatic tries to find the View Assist entity linked to the microphone that heard the request.",
-          "view_rules": "Format: category | /view-assist/path | word1, word2. The first matching category wins.",
-          "view_revert_timeout": "Timeout passed to view_assist.navigate for returning to the previous view.",
-          "openclaw_view_path": "Defaults to /view-assist/info while OpenClaw processes the task."
+          "domotics_agent": "Destination for a matching STT request.",
+          "openclaw_agent": "Destination when no keyword matches.",
+          "keywords": "One word per line."
+        }
+      },
+      "openclaw": {
+        "title": "OpenClaw",
+        "description": "Immediate reply, delivery instruction, and processing view.",
+        "data": {
+          "openclaw_ack_message": "Immediate acknowledgement",
+          "openclaw_background_instruction": "Instruction appended to request",
+          "view_openclaw_enabled": "Open processing view",
+          "view_openclaw_path": "Processing view path"
+        },
+        "data_description": {
+          "openclaw_ack_message": "Spoken immediately.",
+          "openclaw_background_instruction": "Added to the request sent to OpenClaw.",
+          "view_openclaw_enabled": "Disable if the view does not exist.",
+          "view_openclaw_path": "Relative name or full path."
+        }
+      },
+      "view_assist": {
+        "title": "View Assist: general settings",
+        "description": "Automatic satellite detection uses pipeline and View Assist device metadata.",
+        "data": {
+          "view_assist_enabled": "Enable View Assist navigation",
+          "view_assist_entity": "View Assist satellite",
+          "view_revert_timeout": "Seconds before reverting"
+        },
+        "data_description": {
+          "view_assist_enabled": "Disable to keep spoken responses only.",
+          "view_assist_entity": "Automatic uses the originating satellite.",
+          "view_revert_timeout": "Value passed to view_assist.navigate."
+        }
+      },
+      "view_weather": {
+        "title": "Weather and forecast",
+        "description": "Configure only the weather and forecast view.",
+        "data": {
+          "view_weather_enabled": "Open weather and forecast view",
+          "view_weather_path": "Weather and forecast view path",
+          "view_weather_keywords": "Weather and forecast keywords"
+        },
+        "data_description": {
+          "view_weather_enabled": "Disable if this view is not installed.",
+          "view_weather_path": "Use a relative view name or a full path starting with /.",
+          "view_weather_keywords": "One word per line. The response is checked first and the original request is used as fallback."
+        }
+      },
+      "view_climate": {
+        "title": "Climate control",
+        "description": "Configure only the climate control view.",
+        "data": {
+          "view_climate_enabled": "Open climate control view",
+          "view_climate_path": "Climate control view path",
+          "view_climate_keywords": "Climate control keywords"
+        },
+        "data_description": {
+          "view_climate_enabled": "Disable if this view is not installed.",
+          "view_climate_path": "Use a relative view name or a full path starting with /.",
+          "view_climate_keywords": "One word per line. The response is checked first and the original request is used as fallback."
+        }
+      },
+      "view_camera": {
+        "title": "Cameras",
+        "description": "Configure only the cameras view.",
+        "data": {
+          "view_camera_enabled": "Open cameras view",
+          "view_camera_path": "Cameras view path",
+          "view_camera_keywords": "Cameras keywords"
+        },
+        "data_description": {
+          "view_camera_enabled": "Disable if this view is not installed.",
+          "view_camera_path": "Use a relative view name or a full path starting with /.",
+          "view_camera_keywords": "One word per line. The response is checked first and the original request is used as fallback."
+        }
+      },
+      "view_alarm": {
+        "title": "Alarms and reminders",
+        "description": "Configure only the alarms and reminders view.",
+        "data": {
+          "view_alarm_enabled": "Open alarms and reminders view",
+          "view_alarm_path": "Alarms and reminders view path",
+          "view_alarm_keywords": "Alarms and reminders keywords"
+        },
+        "data_description": {
+          "view_alarm_enabled": "Disable if this view is not installed.",
+          "view_alarm_path": "Use a relative view name or a full path starting with /.",
+          "view_alarm_keywords": "One word per line. The response is checked first and the original request is used as fallback."
+        }
+      },
+      "view_music": {
+        "title": "Music and media",
+        "description": "Configure only the music and media view.",
+        "data": {
+          "view_music_enabled": "Open music and media view",
+          "view_music_path": "Music and media view path",
+          "view_music_keywords": "Music and media keywords"
+        },
+        "data_description": {
+          "view_music_enabled": "Disable if this view is not installed.",
+          "view_music_path": "Use a relative view name or a full path starting with /.",
+          "view_music_keywords": "One word per line. The response is checked first and the original request is used as fallback."
+        }
+      },
+      "view_list": {
+        "title": "Lists and tasks",
+        "description": "Configure only the lists and tasks view.",
+        "data": {
+          "view_list_enabled": "Open lists and tasks view",
+          "view_list_path": "Lists and tasks view path",
+          "view_list_keywords": "Lists and tasks keywords"
+        },
+        "data_description": {
+          "view_list_enabled": "Disable if this view is not installed.",
+          "view_list_path": "Use a relative view name or a full path starting with /.",
+          "view_list_keywords": "One word per line. The response is checked first and the original request is used as fallback."
+        }
+      },
+      "view_sports": {
+        "title": "Sports",
+        "description": "Configure only the sports view.",
+        "data": {
+          "view_sports_enabled": "Open sports view",
+          "view_sports_path": "Sports view path",
+          "view_sports_keywords": "Sports keywords"
+        },
+        "data_description": {
+          "view_sports_enabled": "Disable if this view is not installed.",
+          "view_sports_path": "Use a relative view name or a full path starting with /.",
+          "view_sports_keywords": "One word per line. The response is checked first and the original request is used as fallback."
+        }
+      },
+      "view_domotics": {
+        "title": "General home control",
+        "description": "Configure only the general home control view.",
+        "data": {
+          "view_domotics_enabled": "Open general home control view",
+          "view_domotics_path": "General home control view path",
+          "view_domotics_keywords": "General home control keywords"
+        },
+        "data_description": {
+          "view_domotics_enabled": "Disable if this view is not installed.",
+          "view_domotics_path": "Use a relative view name or a full path starting with /.",
+          "view_domotics_keywords": "One word per line. The response is checked first and the original request is used as fallback."
         }
       }
     },
     "error": {
       "agents_must_differ": "The two destinations must be different agents.",
       "agent_not_found": "The selected agent is no longer available.",
-      "recursive_agent": "Assist Router cannot be selected as its own destination.",
-      "keywords_required": "Enter at least one home-automation word.",
+      "recursive_agent": "Assist Router cannot select itself as a destination.",
+      "keywords_required": "Enter at least one home automation keyword.",
       "ack_message_required": "Enter an immediate OpenClaw acknowledgement.",
-      "background_instruction_required": "Enter the instruction OpenClaw should follow to deliver the result.",
-      "invalid_view_rules": "Review the categories. Each line must contain: category | /path | words.",
-      "invalid_view_path": "The path must begin with / or be left empty.",
-      "not_enough_agents": "At least two conversation agents must be loaded. Configure Gemini and OpenClaw, restart Home Assistant, and try again."
+      "background_instruction_required": "Enter the delivery instruction for OpenClaw.",
+      "invalid_view_path": "Use a simple name such as weather or a full path starting with /. Do not use spaces.",
+      "view_keywords_required": "Enter at least one keyword for this view or disable it.",
+      "not_enough_agents": "At least two conversation agents must be loaded."
     }
   }
 }

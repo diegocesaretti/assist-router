@@ -23,25 +23,26 @@ from .const import (
     CONF_OPENCLAW_ACK_MESSAGE,
     CONF_OPENCLAW_AGENT,
     CONF_OPENCLAW_BACKGROUND_INSTRUCTION,
-    CONF_OPENCLAW_VIEW_PATH,
+    CONF_OPENCLAW_VIEW_ENABLED,
+    CONF_OPENCLAW_VIEW_PATH_V2,
     CONF_VIEW_ASSIST_ENABLED,
     CONF_VIEW_ASSIST_ENTITY,
     CONF_VIEW_REVERT_TIMEOUT,
-    CONF_VIEW_RULES,
     DEFAULT_KEYWORDS,
+    LEGACY_DEFAULT_KEYWORDS_0_1_3,
     DEFAULT_OPENCLAW_ACK_MESSAGE,
     DEFAULT_OPENCLAW_BACKGROUND_INSTRUCTION,
+    DEFAULT_OPENCLAW_VIEW_ENABLED,
     DEFAULT_OPENCLAW_VIEW_PATH,
     DEFAULT_VIEW_ASSIST_ENABLED,
     DEFAULT_VIEW_ASSIST_ENTITY,
     DEFAULT_VIEW_REVERT_TIMEOUT,
-    DEFAULT_VIEW_RULES,
     ROUTE_DOMOTICS,
     ROUTE_OPENCLAW,
     VIEW_ASSIST_AUTO_ENTITY,
 )
-from .routing import matches_domotics
-from .view_routing import match_view_rule
+from .routing import matches_domotics, migrate_default_keywords
+from .view_routing import apply_legacy_view_settings, match_view, resolve_view_path
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -87,8 +88,12 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
         self, user_input: conversation.ConversationInput
     ) -> conversation.ConversationResult:
         """Route a message to Gemini/Home Assistant or OpenClaw."""
-        settings = {**self.entry.data, **self.entry.options}
-        keyword_text = settings.get(CONF_KEYWORDS, DEFAULT_KEYWORDS)
+        settings = apply_legacy_view_settings({**self.entry.data, **self.entry.options})
+        keyword_text = migrate_default_keywords(
+            settings.get(CONF_KEYWORDS),
+            LEGACY_DEFAULT_KEYWORDS_0_1_3,
+            DEFAULT_KEYWORDS,
+        )
 
         if matches_domotics(user_input.text, keyword_text):
             target_agent_id = settings[CONF_DOMOTICS_AGENT]
@@ -144,11 +149,19 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
                 "OpenClaw request",
             )
 
-            openclaw_view_path = settings.get(
-                CONF_OPENCLAW_VIEW_PATH,
-                DEFAULT_OPENCLAW_VIEW_PATH,
+            openclaw_view_path = str(
+                settings.get(
+                    CONF_OPENCLAW_VIEW_PATH_V2,
+                    DEFAULT_OPENCLAW_VIEW_PATH,
+                )
             ).strip()
-            if openclaw_view_path:
+            if (
+                settings.get(
+                    CONF_OPENCLAW_VIEW_ENABLED,
+                    DEFAULT_OPENCLAW_VIEW_ENABLED,
+                )
+                and openclaw_view_path
+            ):
                 self._schedule_view_assist_navigation(
                     user_input=user_input,
                     settings=settings,
@@ -174,28 +187,22 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
             DEFAULT_VIEW_ASSIST_ENABLED,
         ):
             response_text = self._extract_response_text(result)
-            if response_text:
-                try:
-                    rule = match_view_rule(
-                        response_text,
-                        settings.get(CONF_VIEW_RULES, DEFAULT_VIEW_RULES),
-                    )
-                except ValueError:
-                    _LOGGER.exception("Invalid View Assist response rules")
-                    rule = None
-
-                if rule is not None:
-                    self._schedule_view_assist_navigation(
-                        user_input=user_input,
-                        settings=settings,
-                        path=rule.path,
-                        category=rule.category,
-                    )
-                    _LOGGER.debug(
-                        "Matched View Assist response category %s for path %s",
-                        rule.category,
-                        rule.path,
-                    )
+            view_match = match_view(response_text, user_input.text, settings)
+            if view_match is not None:
+                self._schedule_view_assist_navigation(
+                    user_input=user_input,
+                    settings=settings,
+                    path=view_match.path,
+                    category=view_match.slug,
+                )
+                _LOGGER.debug(
+                    "Matched View Assist category %s: response hits=%s, "
+                    "request hits=%s, configured path=%s",
+                    view_match.slug,
+                    view_match.response_hits,
+                    view_match.request_hits,
+                    view_match.path,
+                )
 
         return self._wrap_downstream_result(result, base_conversation_id)
 
@@ -278,16 +285,24 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
                 )
                 return
 
+            entity_state = self.hass.states.get(entity_id)
+            resolved_path = resolve_view_path(path, entity_state)
+            if not resolved_path:
+                _LOGGER.warning(
+                    "View Assist navigation skipped: empty path for category request"
+                )
+                return
+
             service_data: dict[str, Any] = {
                 "device": entity_id,
-                "path": path,
+                "path": resolved_path,
                 "revert_timeout": int(revert_timeout),
             }
             call_kwargs: dict[str, Any] = {
                 "domain": "view_assist",
                 "service": "navigate",
                 "service_data": service_data,
-                "blocking": False,
+                "blocking": True,
                 "context": user_input.context,
             }
             supported = inspect.signature(
@@ -301,14 +316,17 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
                 }
             )
             _LOGGER.debug(
-                "Navigated View Assist entity %s to %s",
+                "Navigated View Assist entity %s to %s (configured as %s)",
                 entity_id,
+                resolved_path,
                 path,
             )
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 - visual feedback must not break TTS.
-            _LOGGER.exception("View Assist navigation failed for path %s", path)
+            _LOGGER.exception(
+                "View Assist navigation failed for configured path %s", path
+            )
 
     def _resolve_view_assist_entity(
         self,
@@ -320,45 +338,65 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
             return configured_entity
 
         registry = er.async_get(self.hass)
-        device_id = getattr(user_input, "device_id", None)
+        raw_device_id = getattr(user_input, "device_id", None)
+        satellite_id = getattr(user_input, "satellite_id", None)
+        candidate_device_ids: set[str] = set()
+        candidate_entity_ids: set[str] = set()
 
-        if not device_id:
-            satellite_id = getattr(user_input, "satellite_id", None)
-            if satellite_id:
-                satellite_entry = registry.async_get(satellite_id)
-                if satellite_entry is not None:
-                    device_id = satellite_entry.device_id
-                elif not satellite_id.startswith(("sensor.", "assist_satellite.")):
-                    device_id = satellite_id
+        for candidate in (raw_device_id, satellite_id):
+            if not candidate:
+                continue
+            registry_entry = registry.async_get(candidate)
+            if registry_entry is not None:
+                candidate_entity_ids.add(registry_entry.entity_id)
+                if registry_entry.device_id:
+                    candidate_device_ids.add(registry_entry.device_id)
+            elif str(candidate).startswith(("sensor.", "assist_satellite.")):
+                candidate_entity_ids.add(str(candidate))
+            else:
+                candidate_device_ids.add(str(candidate))
 
         view_assist_sensors: list[str] = []
         for entry in self.hass.config_entries.async_entries("view_assist"):
             sensor_entity_id = None
             for entity_entry in er.async_entries_for_config_entry(
-                registry,
-                entry.entry_id,
+                registry, entry.entry_id
             ):
                 if entity_entry.domain == "sensor":
                     sensor_entity_id = entity_entry.entity_id
-                    view_assist_sensors.append(entity_entry.entity_id)
+                    view_assist_sensors.append(sensor_entity_id)
                     break
 
-            if not device_id or sensor_entity_id is None:
+            if sensor_entity_id is None:
                 continue
+            if sensor_entity_id in candidate_entity_ids:
+                return sensor_entity_id
 
-            mic_entity_id = entry.data.get("mic_device")
+            sensor_state = self.hass.states.get(sensor_entity_id)
+            attributes = sensor_state.attributes if sensor_state is not None else {}
+            for attribute_name in ("mic_device_id", "voice_device_id"):
+                attribute_value = attributes.get(attribute_name)
+                if attribute_value and str(attribute_value) in candidate_device_ids:
+                    return sensor_entity_id
+
+            mic_entity_id = attributes.get("mic_device") or entry.data.get("mic_device")
             runtime_data = getattr(entry, "runtime_data", None)
             core_data = getattr(runtime_data, "core", None)
             mic_entity_id = getattr(core_data, "mic_device", None) or mic_entity_id
 
-            if not mic_entity_id:
-                continue
-            mic_entity = registry.async_get(mic_entity_id)
-            if mic_entity is not None and mic_entity.device_id == device_id:
-                return sensor_entity_id
+            if mic_entity_id:
+                mic_entity = registry.async_get(mic_entity_id)
+                if mic_entity is not None:
+                    if mic_entity.entity_id in candidate_entity_ids:
+                        return sensor_entity_id
+                    if (
+                        mic_entity.device_id
+                        and mic_entity.device_id in candidate_device_ids
+                    ):
+                        return sensor_entity_id
 
-        # A single-satellite setup is unambiguous even when the pipeline did not
-        # provide a device_id (for example, some browser-based microphones).
+        # A single-satellite setup is unambiguous even when a browser microphone
+        # does not propagate device_id through the conversation pipeline.
         unique_sensors = list(dict.fromkeys(view_assist_sensors))
         if len(unique_sensors) == 1:
             return unique_sensors[0]

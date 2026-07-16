@@ -3,31 +3,47 @@
   "config": {
     "step": {
       "user": {
-        "title": "Configurar Assist Router",
-        "description": "Elegí los agentes, el filtro de domótica, el comportamiento de OpenClaw y la navegación visual de View Assist.",
+        "title": "Agentes y filtro principal",
+        "description": "Elegí los dos agentes y las palabras que hacen que una frase vaya al agente de domótica.",
         "data": {
           "domotics_agent": "Agente de domótica",
           "openclaw_agent": "Agente OpenClaw",
-          "keywords": "Palabras de domótica",
-          "openclaw_ack_message": "Respuesta inmediata al derivar a OpenClaw",
-          "openclaw_background_instruction": "Instrucción de entrega para OpenClaw",
-          "view_assist_enabled": "Abrir vistas de View Assist",
-          "view_assist_entity": "Satélite View Assist",
-          "view_rules": "Categorías de respuesta y vistas",
-          "view_revert_timeout": "Segundos antes de volver a la vista anterior",
-          "openclaw_view_path": "Vista mientras trabaja OpenClaw"
+          "keywords": "Palabras de domótica"
         },
         "data_description": {
-          "domotics_agent": "Agente que procesa las frases que contienen una palabra del filtro.",
-          "openclaw_agent": "Agente que procesa las demás frases.",
-          "keywords": "Palabras separadas por espacios, comas o líneas. La coincidencia es por palabra completa e ignora mayúsculas y tildes.",
-          "openclaw_ack_message": "Frase que Home Assistant dice inmediatamente sin esperar a OpenClaw.",
-          "openclaw_background_instruction": "Texto agregado al pedido para que OpenClaw termine la tarea y entregue el resultado por WhatsApp.",
-          "view_assist_enabled": "Después de la respuesta de domótica, analiza el texto hablado y abre la vista cuya categoría coincida.",
-          "view_assist_entity": "Automático usa el satélite que originó la conversación. Elegí uno fijo como respaldo si tu dispositivo no informa su ID.",
-          "view_rules": "Una regla por línea: categoria | /view-assist/ruta | palabra1, palabra2. Se evalúan de arriba hacia abajo sobre la respuesta final.",
-          "view_revert_timeout": "Usá 0 para no solicitar retorno automático. View Assist admite hasta 120 segundos.",
-          "openclaw_view_path": "Ruta que se abre al derivar una tarea en segundo plano. Dejá el campo vacío para no cambiar de vista."
+          "domotics_agent": "Procesa las frases que contienen al menos una palabra del filtro.",
+          "openclaw_agent": "Procesa las demás frases.",
+          "keywords": "Una palabra por línea. La coincidencia usa palabras completas e ignora mayúsculas y tildes."
+        }
+      },
+      "openclaw": {
+        "title": "Comportamiento de OpenClaw",
+        "description": "Configurá la respuesta inmediata, la instrucción de entrega y la vista de procesamiento.",
+        "data": {
+          "openclaw_ack_message": "Respuesta inmediata al derivar a OpenClaw",
+          "openclaw_background_instruction": "Instrucción añadida al pedido",
+          "view_openclaw_enabled": "Abrir una vista mientras trabaja OpenClaw",
+          "view_openclaw_path": "Vista de OpenClaw"
+        },
+        "data_description": {
+          "openclaw_ack_message": "Home Assistant dice esta frase sin esperar el resultado.",
+          "openclaw_background_instruction": "Texto añadido al pedido para que OpenClaw entregue el resultado por WhatsApp.",
+          "view_openclaw_enabled": "Desactivala si no tenés una vista de información o procesamiento.",
+          "view_openclaw_path": "Usá un nombre relativo como 'info' o una ruta completa."
+        }
+      },
+      "view_assist": {
+        "title": "Ajustes generales de View Assist",
+        "description": "Elegí el satélite y el tiempo de retorno. Las vistas individuales se pueden ajustar después desde Configurar.",
+        "data": {
+          "view_assist_enabled": "Activar navegación de View Assist",
+          "view_assist_entity": "Satélite View Assist",
+          "view_revert_timeout": "Segundos antes de volver"
+        },
+        "data_description": {
+          "view_assist_enabled": "Permite que el router abra una vista relacionada con la respuesta.",
+          "view_assist_entity": "Automático intenta usar el mismo satélite que originó la conversación.",
+          "view_revert_timeout": "Usá 0 para no solicitar retorno automático."
         }
       }
     },
@@ -38,8 +54,8 @@
       "keywords_required": "Ingresá al menos una palabra de domótica.",
       "ack_message_required": "Ingresá una respuesta inmediata para OpenClaw.",
       "background_instruction_required": "Ingresá la instrucción que OpenClaw debe seguir para entregar el resultado.",
-      "invalid_view_rules": "Revisá las categorías. Cada línea debe tener: categoria | /ruta | palabras.",
-      "invalid_view_path": "La ruta debe comenzar con / o quedar vacía.",
+      "invalid_view_path": "Usá un nombre simple como weather o una ruta completa que empiece con /. No uses espacios.",
+      "view_keywords_required": "Ingresá al menos una palabra para esta vista o desactivala.",
       "not_enough_agents": "No hay al menos dos agentes de conversación cargados. Configurá Gemini y OpenClaw, reiniciá Home Assistant y volvé a intentar."
     },
     "abort": {
@@ -49,31 +65,176 @@
   "options": {
     "step": {
       "init": {
-        "title": "Opciones de Assist Router",
-        "description": "Modificá los agentes, las palabras, OpenClaw y las categorías visuales. Los cambios se aplican al guardar.",
+        "title": "Configurar Assist Router",
+        "description": "Elegí qué parte querés modificar. Cada vista tiene su propia pantalla con activación, ruta y palabras.",
+        "menu_options": {
+          "routing": "Agentes y filtro principal",
+          "openclaw": "OpenClaw",
+          "view_assist": "View Assist: ajustes generales",
+          "view_weather": "Clima y tiempo",
+          "view_climate": "Aire y calefacción",
+          "view_camera": "Cámaras",
+          "view_alarm": "Alarmas y recordatorios",
+          "view_music": "Música y multimedia",
+          "view_list": "Listas y tareas",
+          "view_sports": "Deportes",
+          "view_domotics": "Domótica general"
+        }
+      },
+      "routing": {
+        "title": "Agentes y filtro principal",
+        "description": "Estas palabras deciden si el pedido va al agente de domótica o a OpenClaw.",
         "data": {
           "domotics_agent": "Agente de domótica",
           "openclaw_agent": "Agente OpenClaw",
-          "keywords": "Palabras de domótica",
-          "openclaw_ack_message": "Respuesta inmediata al derivar a OpenClaw",
-          "openclaw_background_instruction": "Instrucción de entrega para OpenClaw",
-          "view_assist_enabled": "Abrir vistas de View Assist",
-          "view_assist_entity": "Satélite View Assist",
-          "view_rules": "Categorías de respuesta y vistas",
-          "view_revert_timeout": "Segundos antes de volver a la vista anterior",
-          "openclaw_view_path": "Vista mientras trabaja OpenClaw"
+          "keywords": "Palabras de domótica"
         },
         "data_description": {
           "domotics_agent": "Destino cuando el STT contiene una palabra del filtro.",
           "openclaw_agent": "Destino cuando no hay coincidencias.",
-          "keywords": "Una palabra por línea es lo más cómodo; también se aceptan espacios, comas y punto y coma.",
-          "openclaw_ack_message": "Respuesta hablada instantánea que libera el pipeline.",
-          "openclaw_background_instruction": "Instrucción añadida al pedido que se envía en segundo plano.",
-          "view_assist_enabled": "La categoría se elige usando las palabras presentes en la respuesta del agente de domótica.",
-          "view_assist_entity": "Automático intenta localizar el View Assist asociado al micrófono que escuchó.",
-          "view_rules": "Formato: categoria | /view-assist/ruta | palabra1, palabra2. La primera categoría que coincide gana.",
-          "view_revert_timeout": "Tiempo enviado a view_assist.navigate para volver a la vista anterior.",
-          "openclaw_view_path": "Por defecto abre /view-assist/info mientras OpenClaw procesa la tarea."
+          "keywords": "Una palabra por línea. Se ignoran tildes y mayúsculas."
+        }
+      },
+      "openclaw": {
+        "title": "OpenClaw",
+        "description": "Respuesta instantánea, instrucción de entrega y vista de procesamiento.",
+        "data": {
+          "openclaw_ack_message": "Respuesta inmediata",
+          "openclaw_background_instruction": "Instrucción añadida al pedido",
+          "view_openclaw_enabled": "Abrir vista de procesamiento",
+          "view_openclaw_path": "Ruta de la vista de procesamiento"
+        },
+        "data_description": {
+          "openclaw_ack_message": "Se reproduce inmediatamente para liberar el pipeline.",
+          "openclaw_background_instruction": "Se añade al texto enviado al agente OpenClaw.",
+          "view_openclaw_enabled": "Desactivala si esa vista no existe.",
+          "view_openclaw_path": "Nombre relativo como 'info' o ruta completa como '/view-assist/info'."
+        }
+      },
+      "view_assist": {
+        "title": "View Assist: ajustes generales",
+        "description": "La detección automática fue reforzada para usar el dispositivo, el satélite o los atributos del sensor View Assist.",
+        "data": {
+          "view_assist_enabled": "Activar navegación de View Assist",
+          "view_assist_entity": "Satélite View Assist",
+          "view_revert_timeout": "Segundos antes de volver"
+        },
+        "data_description": {
+          "view_assist_enabled": "Desactivá esta opción para conservar solamente las respuestas habladas.",
+          "view_assist_entity": "Automático usa el satélite que escuchó. Elegí uno fijo si tu micrófono no informa su identidad.",
+          "view_revert_timeout": "Valor enviado a view_assist.navigate. Usá 0 para permanecer en la vista."
+        }
+      },
+      "view_weather": {
+        "title": "Clima y tiempo",
+        "description": "Configurá únicamente la vista de clima y tiempo.",
+        "data": {
+          "view_weather_enabled": "Abrir la vista de clima y tiempo",
+          "view_weather_path": "Ruta de la vista: Clima y tiempo",
+          "view_weather_keywords": "Palabras para la vista: Clima y tiempo"
+        },
+        "data_description": {
+          "view_weather_enabled": "Desactivala si esa vista no está instalada en tu dashboard.",
+          "view_weather_path": "Podés escribir solo el nombre, por ejemplo 'weather'. El router agregará automáticamente la ruta real del dashboard. También se acepta una ruta completa que empiece con /.",
+          "view_weather_keywords": "Una palabra por línea. Se comparan primero con la respuesta final y, si no hay coincidencias, con la frase original del STT."
+        }
+      },
+      "view_climate": {
+        "title": "Aire y calefacción",
+        "description": "Configurá únicamente la vista de aire y calefacción.",
+        "data": {
+          "view_climate_enabled": "Abrir la vista de aire y calefacción",
+          "view_climate_path": "Ruta de la vista: Aire y calefacción",
+          "view_climate_keywords": "Palabras para la vista: Aire y calefacción"
+        },
+        "data_description": {
+          "view_climate_enabled": "Desactivala si esa vista no está instalada en tu dashboard.",
+          "view_climate_path": "Podés escribir solo el nombre, por ejemplo 'weather'. El router agregará automáticamente la ruta real del dashboard. También se acepta una ruta completa que empiece con /.",
+          "view_climate_keywords": "Una palabra por línea. Se comparan primero con la respuesta final y, si no hay coincidencias, con la frase original del STT."
+        }
+      },
+      "view_camera": {
+        "title": "Cámaras",
+        "description": "Configurá únicamente la vista de cámaras.",
+        "data": {
+          "view_camera_enabled": "Abrir la vista de cámaras",
+          "view_camera_path": "Ruta de la vista: Cámaras",
+          "view_camera_keywords": "Palabras para la vista: Cámaras"
+        },
+        "data_description": {
+          "view_camera_enabled": "Desactivala si esa vista no está instalada en tu dashboard.",
+          "view_camera_path": "Podés escribir solo el nombre, por ejemplo 'weather'. El router agregará automáticamente la ruta real del dashboard. También se acepta una ruta completa que empiece con /.",
+          "view_camera_keywords": "Una palabra por línea. Se comparan primero con la respuesta final y, si no hay coincidencias, con la frase original del STT."
+        }
+      },
+      "view_alarm": {
+        "title": "Alarmas y recordatorios",
+        "description": "Configurá únicamente la vista de alarmas y recordatorios.",
+        "data": {
+          "view_alarm_enabled": "Abrir la vista de alarmas y recordatorios",
+          "view_alarm_path": "Ruta de la vista: Alarmas y recordatorios",
+          "view_alarm_keywords": "Palabras para la vista: Alarmas y recordatorios"
+        },
+        "data_description": {
+          "view_alarm_enabled": "Desactivala si esa vista no está instalada en tu dashboard.",
+          "view_alarm_path": "Podés escribir solo el nombre, por ejemplo 'weather'. El router agregará automáticamente la ruta real del dashboard. También se acepta una ruta completa que empiece con /.",
+          "view_alarm_keywords": "Una palabra por línea. Se comparan primero con la respuesta final y, si no hay coincidencias, con la frase original del STT."
+        }
+      },
+      "view_music": {
+        "title": "Música y multimedia",
+        "description": "Configurá únicamente la vista de música y multimedia.",
+        "data": {
+          "view_music_enabled": "Abrir la vista de música y multimedia",
+          "view_music_path": "Ruta de la vista: Música y multimedia",
+          "view_music_keywords": "Palabras para la vista: Música y multimedia"
+        },
+        "data_description": {
+          "view_music_enabled": "Desactivala si esa vista no está instalada en tu dashboard.",
+          "view_music_path": "Podés escribir solo el nombre, por ejemplo 'weather'. El router agregará automáticamente la ruta real del dashboard. También se acepta una ruta completa que empiece con /.",
+          "view_music_keywords": "Una palabra por línea. Se comparan primero con la respuesta final y, si no hay coincidencias, con la frase original del STT."
+        }
+      },
+      "view_list": {
+        "title": "Listas y tareas",
+        "description": "Configurá únicamente la vista de listas y tareas.",
+        "data": {
+          "view_list_enabled": "Abrir la vista de listas y tareas",
+          "view_list_path": "Ruta de la vista: Listas y tareas",
+          "view_list_keywords": "Palabras para la vista: Listas y tareas"
+        },
+        "data_description": {
+          "view_list_enabled": "Desactivala si esa vista no está instalada en tu dashboard.",
+          "view_list_path": "Podés escribir solo el nombre, por ejemplo 'weather'. El router agregará automáticamente la ruta real del dashboard. También se acepta una ruta completa que empiece con /.",
+          "view_list_keywords": "Una palabra por línea. Se comparan primero con la respuesta final y, si no hay coincidencias, con la frase original del STT."
+        }
+      },
+      "view_sports": {
+        "title": "Deportes",
+        "description": "Configurá únicamente la vista de deportes.",
+        "data": {
+          "view_sports_enabled": "Abrir la vista de deportes",
+          "view_sports_path": "Ruta de la vista: Deportes",
+          "view_sports_keywords": "Palabras para la vista: Deportes"
+        },
+        "data_description": {
+          "view_sports_enabled": "Desactivala si esa vista no está instalada en tu dashboard.",
+          "view_sports_path": "Podés escribir solo el nombre, por ejemplo 'weather'. El router agregará automáticamente la ruta real del dashboard. También se acepta una ruta completa que empiece con /.",
+          "view_sports_keywords": "Una palabra por línea. Se comparan primero con la respuesta final y, si no hay coincidencias, con la frase original del STT."
+        }
+      },
+      "view_domotics": {
+        "title": "Domótica general",
+        "description": "Configurá únicamente la vista de domótica general.",
+        "data": {
+          "view_domotics_enabled": "Abrir la vista de domótica general",
+          "view_domotics_path": "Ruta de la vista: Domótica general",
+          "view_domotics_keywords": "Palabras para la vista: Domótica general"
+        },
+        "data_description": {
+          "view_domotics_enabled": "Desactivala si esa vista no está instalada en tu dashboard.",
+          "view_domotics_path": "Podés escribir solo el nombre, por ejemplo 'weather'. El router agregará automáticamente la ruta real del dashboard. También se acepta una ruta completa que empiece con /.",
+          "view_domotics_keywords": "Una palabra por línea. Se comparan primero con la respuesta final y, si no hay coincidencias, con la frase original del STT."
         }
       }
     },
@@ -84,8 +245,8 @@
       "keywords_required": "Ingresá al menos una palabra de domótica.",
       "ack_message_required": "Ingresá una respuesta inmediata para OpenClaw.",
       "background_instruction_required": "Ingresá la instrucción que OpenClaw debe seguir para entregar el resultado.",
-      "invalid_view_rules": "Revisá las categorías. Cada línea debe tener: categoria | /ruta | palabras.",
-      "invalid_view_path": "La ruta debe comenzar con / o quedar vacía.",
+      "invalid_view_path": "Usá un nombre simple como weather o una ruta completa que empiece con /. No uses espacios.",
+      "view_keywords_required": "Ingresá al menos una palabra para esta vista o desactivala.",
       "not_enough_agents": "No hay al menos dos agentes de conversación cargados. Configurá Gemini y OpenClaw, reiniciá Home Assistant y volvé a intentar."
     }
   }

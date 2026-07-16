@@ -41,3 +41,14 @@ def matches_domotics(text: str, keyword_text: str) -> bool:
     if not keywords:
         return False
     return bool(words_from_text(text) & keywords)
+
+
+def migrate_default_keywords(
+    value: str | None, legacy_default: str, current_default: str
+) -> str:
+    """Upgrade an untouched legacy default while preserving custom lists."""
+    if value is None or not parse_keywords(value):
+        return canonicalize_keywords(current_default)
+    if canonicalize_keywords(value) == canonicalize_keywords(legacy_default):
+        return canonicalize_keywords(current_default)
+    return canonicalize_keywords(value)
