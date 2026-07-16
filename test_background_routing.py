@@ -136,7 +136,8 @@ class ConfigEntry:
             "view_response_enabled": True,
             "view_response_path": "info",
             "view_response_display_time": 0,
-            "view_related_display_time": 4,
+            "view_related_display_time": 1,
+            "follow_up_enabled": True,
             "openclaw_view_path": "/view-assist/info",
             "end_phrases": "chau\ngracias\nok\nbueno\nhasta luego",
             "end_response": "Hasta luego.",
@@ -339,10 +340,11 @@ async def main():
     set_state_calls = [
         call for call in hass.services.calls if call["service"] == "set_state"
     ]
-    assert navigate_calls[-1]["service_data"]["path"] == "/view-assist/info"
-    assert navigate_calls[-1]["service_data"]["device"] == (
+    assert navigate_calls[-2]["service_data"]["path"] == "/view-assist/info"
+    assert navigate_calls[-2]["service_data"]["device"] == (
         "sensor.viewassist_kitchen"
     )
+    assert navigate_calls[-1]["service_data"]["path"] == "home"
     assert set_state_calls[-1]["service_data"]["message"] == ""
 
     # The acknowledgement can never re-enter the router.
@@ -373,6 +375,7 @@ async def main():
         "Para una salsa blanca"
     )
     assert recipe_result.conversation_id is not None
+    assert recipe_result.continue_conversation is True
     assert CALLS[-1]["agent_id"] == "general"
     recipe_tasks = hass.tasks[previous_task_count:]
     await asyncio.gather(*recipe_tasks)
@@ -406,16 +409,18 @@ async def main():
         "La luz del living quedó encendida"
     )
     assert CALLS[-1]["agent_id"] == "gemini"
+    assert domotics_result.continue_conversation is True
 
     new_tasks = hass.tasks[previous_task_count:]
     await asyncio.gather(*new_tasks)
     domotics_navigate_calls = [
         call for call in hass.services.calls if call["service"] == "navigate"
     ]
-    assert domotics_navigate_calls[-1]["service_data"]["path"] == (
+    assert domotics_navigate_calls[-2]["service_data"]["path"] == (
         "/view-assist/intent"
     )
-    assert domotics_navigate_calls[-1]["service_data"]["revert_timeout"] == 4
+    assert domotics_navigate_calls[-2]["service_data"]["revert_timeout"] == 0
+    assert domotics_navigate_calls[-1]["service_data"]["path"] == "home"
     domotics_set_state_calls = [
         call for call in hass.services.calls if call["service"] == "set_state"
     ]
@@ -424,6 +429,31 @@ async def main():
         == "La luz del living quedó encendida"
         for call in domotics_set_state_calls
     )
+
+    # A new turn cancels the previous delayed return-to-home action.
+    home_count_before = sum(
+        1
+        for call in hass.services.calls
+        if call["service"] == "navigate"
+        and call["service_data"].get("path") == "home"
+    )
+    first_task_start = len(hass.tasks)
+    await router.async_process(
+        ConversationInput(text="Prendé la luz", device_id="device-kitchen")
+    )
+    await asyncio.sleep(0.1)
+    await router.async_process(
+        ConversationInput(text="Apagá la luz", device_id="device-kitchen")
+    )
+    overlapping_tasks = hass.tasks[first_task_start:]
+    await asyncio.gather(*overlapping_tasks)
+    home_count_after = sum(
+        1
+        for call in hass.services.calls
+        if call["service"] == "navigate"
+        and call["service_data"].get("path") == "home"
+    )
+    assert home_count_after - home_count_before == 1
 
     # Closing phrases still terminate without contacting any destination.
     previous_call_count = len(CALLS)

@@ -53,7 +53,7 @@
           "view_assist_entity": "Automatic uses the satellite that originated the conversation.",
           "view_response_enabled": "Shows the agent response as text before opening the category view.",
           "view_response_path": "Use a relative name such as 'info' or a full path.",
-          "view_related_display_time": "How long the weather, camera, domotics, or other related view remains visible. Use 0 to disable automatic return.",
+          "view_related_display_time": "Follow-up listening window while the weather, camera, thermostat, domotics, or other related view is visible. It then returns explicitly to home. Recommended: 5 seconds. Use 0 to keep the view open.",
           "view_navigation_delay": "Initial delay so View Assist can finish the pipeline state transition. Recommended: 0.8 seconds.",
           "view_response_min_time": "Short replies are never shown for less than this time. Recommended: 3 seconds.",
           "view_response_seconds_per_word": "Controls how display time grows with reply length. Recommended: 0.35 seconds per word.",
@@ -251,12 +251,14 @@
         "data": {
           "end_phrases": "Closing phrases",
           "end_response": "Closing response",
-          "end_view_home": "Return to the home view"
+          "end_view_home": "Return to the home view",
+          "follow_up_enabled": "Wait for a follow-up response"
         },
         "data_description": {
           "end_phrases": "One phrase per line. The whole utterance is matched while ignoring case, accents, and punctuation.",
           "end_response": "May be left blank to end without spoken feedback.",
-          "end_view_home": "Open the home screen on the same View Assist satellite when closing."
+          "end_view_home": "Open the home screen on the same View Assist satellite when closing.",
+          "follow_up_enabled": "After a normal response, Home Assistant listens for another utterance. Closing phrases end the session, while OpenClaw always remains asynchronous."
         }
       },
       "edit_openclaw": {
@@ -294,7 +296,7 @@
           "view_assist_entity": "Automatic uses the originating satellite.",
           "view_response_enabled": "Shows the agent response as text before opening the category view.",
           "view_response_path": "Use a relative name such as 'info' or a full path.",
-          "view_related_display_time": "How long the weather, camera, domotics, or other related view remains visible. Use 0 to disable automatic return.",
+          "view_related_display_time": "Follow-up listening window while the weather, camera, thermostat, domotics, or other related view is visible. It then returns explicitly to home. Recommended: 5 seconds. Use 0 to keep the view open.",
           "view_navigation_delay": "Initial delay so View Assist can finish the pipeline state transition. Recommended: 0.8 seconds.",
           "view_response_min_time": "Short replies are never shown for less than this time. Recommended: 3 seconds.",
           "view_response_seconds_per_word": "Controls how display time grows with reply length. Recommended: 0.35 seconds per word.",

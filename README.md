@@ -1,4 +1,4 @@
-# Assist Router 0.3.1 para Home Assistant
+# Assist Router 0.3.2 para Home Assistant
 
 Agente frontal para Assist con tres destinos: domótica, consultas generales rápidas y OpenClaw en segundo plano. Mantiene la integración con View Assist, el cierre de conversación y la entrega de tareas largas por WhatsApp.
 
@@ -153,3 +153,12 @@ No hace falta borrar ni volver a crear la integración.
 ## Diagnóstico
 
 En **Ajustes → Sistema → Registros**, buscar `assist_router`. Los registros indican la ruta seleccionada, el agente general usado, las derivaciones autorizadas a OpenClaw y la secuencia de View Assist.
+
+
+## 0.3.2: seguimiento y regreso seguro
+
+- Las respuestas normales pueden dejar abierta una escucha de seguimiento.
+- La vista temática se muestra 5 segundos por defecto.
+- El regreso se hace explícitamente a `home`, nunca a la vista anterior.
+- Una nueva frase invalida el regreso pendiente de la respuesta previa.
+- El valor 0 deja la vista temática abierta sin retorno automático.

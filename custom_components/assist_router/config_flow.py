@@ -27,6 +27,7 @@ from .const import (
     CONF_END_PHRASES,
     CONF_END_RESPONSE,
     CONF_END_VIEW_HOME,
+    CONF_FOLLOW_UP_ENABLED,
     CONF_KEYWORDS,
     CONF_OPENCLAW_ACK_MESSAGE,
     CONF_OPENCLAW_AGENT,
@@ -51,6 +52,7 @@ from .const import (
     DEFAULT_END_PHRASES,
     DEFAULT_END_RESPONSE,
     DEFAULT_END_VIEW_HOME,
+    DEFAULT_FOLLOW_UP_ENABLED,
     DEFAULT_KEYWORDS,
     DEFAULT_GENERAL_ROUTER_INSTRUCTION,
     DEFAULT_FORCE_OPENCLAW_PHRASES,
@@ -69,6 +71,7 @@ from .const import (
     DEFAULT_RESPONSE_SECONDS_PER_WORD,
     DEFAULT_RESPONSE_DISPLAY_MAX_TIME,
     DEFAULT_RELATED_VIEW_DISPLAY_TIME,
+    LEGACY_DEFAULT_RELATED_VIEW_DISPLAY_TIME,
     DOMAIN,
     LEGACY_DEFAULT_KEYWORDS_0_1_3,
     VIEW_ASSIST_AUTO_ENTITY,
@@ -186,6 +189,12 @@ def _effective_settings(entry: ConfigEntry) -> dict[str, Any]:
     settings.setdefault(
         CONF_RESPONSE_DISPLAY_MAX_TIME, DEFAULT_RESPONSE_DISPLAY_MAX_TIME
     )
+    settings.setdefault(CONF_FOLLOW_UP_ENABLED, DEFAULT_FOLLOW_UP_ENABLED)
+    if (
+        settings.get(CONF_RELATED_VIEW_DISPLAY_TIME)
+        == LEGACY_DEFAULT_RELATED_VIEW_DISPLAY_TIME
+    ):
+        settings[CONF_RELATED_VIEW_DISPLAY_TIME] = DEFAULT_RELATED_VIEW_DISPLAY_TIME
     return settings
 
 
@@ -196,6 +205,7 @@ def _base_defaults() -> dict[str, Any]:
         CONF_END_PHRASES: DEFAULT_END_PHRASES,
         CONF_END_RESPONSE: DEFAULT_END_RESPONSE,
         CONF_END_VIEW_HOME: DEFAULT_END_VIEW_HOME,
+        CONF_FOLLOW_UP_ENABLED: DEFAULT_FOLLOW_UP_ENABLED,
         CONF_GENERAL_ROUTER_INSTRUCTION: DEFAULT_GENERAL_ROUTER_INSTRUCTION,
         CONF_FORCE_OPENCLAW_PHRASES: DEFAULT_FORCE_OPENCLAW_PHRASES,
         CONF_OPENCLAW_ACK_MESSAGE: DEFAULT_OPENCLAW_ACK_MESSAGE,
@@ -261,6 +271,12 @@ def _conversation_schema(defaults: dict[str, Any]) -> vol.Schema:
             vol.Required(
                 CONF_END_VIEW_HOME,
                 default=defaults.get(CONF_END_VIEW_HOME, DEFAULT_END_VIEW_HOME),
+            ): bool,
+            vol.Required(
+                CONF_FOLLOW_UP_ENABLED,
+                default=defaults.get(
+                    CONF_FOLLOW_UP_ENABLED, DEFAULT_FOLLOW_UP_ENABLED
+                ),
             ): bool,
         }
     )

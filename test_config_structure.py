@@ -61,6 +61,7 @@ for definition in view_routing.VIEW_DEFINITIONS:
 routing = strings["options"]["step"]["edit_routing"]["data"]
 assert "general_agent" in routing
 assert "end_phrases" in strings["options"]["step"]["edit_conversation"]["data"]
+assert "follow_up_enabled" in strings["options"]["step"]["edit_conversation"]["data"]
 assert "general_router_instruction" in strings["options"]["step"]["edit_general"]["data"]
 assert "force_openclaw_phrases" in strings["options"]["step"]["edit_general"]["data"]
 assert "view_rules" not in menu
@@ -75,3 +76,7 @@ assert "view_related_display_time" in general
 assert "categoria | /ruta | palabras" not in json.dumps(strings, ensure_ascii=False)
 
 print("Configuration structure tests: OK")
+
+from custom_components.assist_router import view_routing as _vr
+const_source = (PACKAGE_ROOT / "const.py").read_text()
+assert "DEFAULT_RELATED_VIEW_DISPLAY_TIME = 5" in const_source

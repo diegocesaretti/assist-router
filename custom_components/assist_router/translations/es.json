@@ -53,7 +53,7 @@
           "view_assist_entity": "Automático intenta usar el mismo satélite que originó la conversación.",
           "view_response_enabled": "Muestra la respuesta del agente como texto antes de abrir la vista temática.",
           "view_response_path": "Usá un nombre relativo como 'info' o una ruta completa.",
-          "view_related_display_time": "Tiempo que permanece la vista de clima, cámaras, domótica, etc. Valor recomendado: 4 segundos. Usá 0 para que no vuelva automáticamente.",
+          "view_related_display_time": "Tiempo de espera para una respuesta mientras se muestra clima, cámaras, termostato, domótica, etc. Después vuelve explícitamente a inicio. Recomendado: 5 segundos. Usá 0 para dejar la vista abierta.",
           "view_navigation_delay": "Espera inicial para que View Assist termine de procesar el pipeline. El valor recomendado es 0,8 segundos.",
           "view_response_min_time": "Las respuestas cortas nunca se muestran menos de este tiempo. Recomendado: 3 segundos.",
           "view_response_seconds_per_word": "Controla cuánto aumenta el tiempo según la longitud. Recomendado: 0,35 segundos por palabra.",
@@ -251,12 +251,14 @@
         "data": {
           "end_phrases": "Frases de cierre",
           "end_response": "Respuesta al cerrar",
-          "end_view_home": "Volver a la vista inicial"
+          "end_view_home": "Volver a la vista inicial",
+          "follow_up_enabled": "Esperar una respuesta de seguimiento"
         },
         "data_description": {
           "end_phrases": "Una frase por línea. Se compara la frase completa, ignorando mayúsculas, tildes y signos. Por ejemplo: chau, gracias, ok, bueno, hasta luego.",
           "end_response": "Puede quedar vacía para cerrar sin respuesta hablada.",
-          "end_view_home": "Al cerrar, abre la pantalla inicial del mismo satélite View Assist."
+          "end_view_home": "Al cerrar, abre la pantalla inicial del mismo satélite View Assist.",
+          "follow_up_enabled": "Después de responder, Home Assistant vuelve a escuchar una frase. Las frases de cierre terminan la sesión y OpenClaw siempre se mantiene asíncrono."
         }
       },
       "edit_openclaw": {
@@ -294,7 +296,7 @@
           "view_assist_entity": "Automático usa el satélite que escuchó. Elegí uno fijo si tu micrófono no informa su identidad.",
           "view_response_enabled": "Muestra la respuesta del agente como texto antes de abrir la vista temática.",
           "view_response_path": "Usá un nombre relativo como 'info' o una ruta completa.",
-          "view_related_display_time": "Tiempo que permanece la vista de clima, cámaras, domótica, etc. Valor recomendado: 4 segundos. Usá 0 para que no vuelva automáticamente.",
+          "view_related_display_time": "Tiempo de espera para una respuesta mientras se muestra clima, cámaras, termostato, domótica, etc. Después vuelve explícitamente a inicio. Recomendado: 5 segundos. Usá 0 para dejar la vista abierta.",
           "view_navigation_delay": "Espera inicial para que View Assist termine de procesar el pipeline. El valor recomendado es 0,8 segundos.",
           "view_response_min_time": "Las respuestas cortas nunca se muestran menos de este tiempo. Recomendado: 3 segundos.",
           "view_response_seconds_per_word": "Controla cuánto aumenta el tiempo según la longitud. Recomendado: 0,35 segundos por palabra.",

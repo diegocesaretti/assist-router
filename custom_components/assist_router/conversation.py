@@ -24,6 +24,7 @@ from .const import (
     CONF_END_PHRASES,
     CONF_END_RESPONSE,
     CONF_END_VIEW_HOME,
+    CONF_FOLLOW_UP_ENABLED,
     CONF_KEYWORDS,
     CONF_OPENCLAW_ACK_MESSAGE,
     CONF_OPENCLAW_AGENT,
@@ -46,6 +47,7 @@ from .const import (
     DEFAULT_END_PHRASES,
     DEFAULT_END_RESPONSE,
     DEFAULT_END_VIEW_HOME,
+    DEFAULT_FOLLOW_UP_ENABLED,
     DEFAULT_KEYWORDS,
     DEFAULT_GENERAL_ROUTER_INSTRUCTION,
     DEFAULT_FORCE_OPENCLAW_PHRASES,
@@ -64,6 +66,7 @@ from .const import (
     DEFAULT_RESPONSE_SECONDS_PER_WORD,
     DEFAULT_RESPONSE_DISPLAY_MAX_TIME,
     DEFAULT_RELATED_VIEW_DISPLAY_TIME,
+    LEGACY_DEFAULT_RELATED_VIEW_DISPLAY_TIME,
     LEGACY_DEFAULT_KEYWORDS_0_1_3,
     OPENCLAW_ROUTE_MARKER,
     ROUTE_DOMOTICS,
@@ -109,6 +112,7 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
         """Initialize the router."""
         self.entry = entry
         self._attr_unique_id = entry.entry_id
+        self._view_sequence_generation: dict[str, int] = {}
 
     @property
     def supported_languages(self) -> list[str] | Literal["*"]:
@@ -130,6 +134,17 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
     ) -> conversation.ConversationResult:
         """Route a message to domotics, a fast general agent, or OpenClaw."""
         settings = apply_legacy_view_settings({**self.entry.data, **self.entry.options})
+        if (
+            settings.get(CONF_RELATED_VIEW_DISPLAY_TIME)
+            == LEGACY_DEFAULT_RELATED_VIEW_DISPLAY_TIME
+        ):
+            settings[CONF_RELATED_VIEW_DISPLAY_TIME] = (
+                DEFAULT_RELATED_VIEW_DISPLAY_TIME
+            )
+        self._invalidate_view_sequence(
+            user_input,
+            settings.get(CONF_VIEW_ASSIST_ENTITY, DEFAULT_VIEW_ASSIST_ENTITY),
+        )
         keyword_text = migrate_default_keywords(
             settings.get(CONF_KEYWORDS),
             LEGACY_DEFAULT_KEYWORDS_0_1_3,
@@ -216,7 +231,13 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
                 settings=settings,
                 result=result,
             )
-            return self._wrap_downstream_result(result, base_conversation_id)
+            return self._wrap_downstream_result(
+                result,
+                base_conversation_id,
+                continue_conversation=bool(
+                    settings.get(CONF_FOLLOW_UP_ENABLED, DEFAULT_FOLLOW_UP_ENABLED)
+                ),
+            )
 
         # Everything outside the deterministic domotics filter is sent to a
         # fast general agent. It either answers normally or returns a private
@@ -252,7 +273,13 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
             settings=settings,
             result=general_result,
         )
-        return self._wrap_downstream_result(general_result, base_conversation_id)
+        return self._wrap_downstream_result(
+            general_result,
+            base_conversation_id,
+            continue_conversation=bool(
+                settings.get(CONF_FOLLOW_UP_ENABLED, DEFAULT_FOLLOW_UP_ENABLED)
+            ),
+        )
 
     def _validate_target_agent(
         self,
@@ -441,13 +468,20 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
         if not (response_enabled and clean_response) and not clean_related_path:
             return
 
+        configured_entity = settings.get(
+            CONF_VIEW_ASSIST_ENTITY,
+            DEFAULT_VIEW_ASSIST_ENTITY,
+        )
+        sequence_key, sequence_generation = self._begin_view_sequence(
+            user_input, configured_entity
+        )
+
         self._create_background_task(
             self._async_show_response_then_view(
                 user_input=user_input,
-                configured_entity=settings.get(
-                    CONF_VIEW_ASSIST_ENTITY,
-                    DEFAULT_VIEW_ASSIST_ENTITY,
-                ),
+                configured_entity=configured_entity,
+                sequence_key=sequence_key,
+                sequence_generation=sequence_generation,
                 response_enabled=response_enabled,
                 response_path=str(
                     settings.get(
@@ -480,6 +514,9 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
                     CONF_VIEW_NAVIGATION_DELAY,
                     DEFAULT_VIEW_NAVIGATION_DELAY,
                 ),
+                follow_up_enabled=bool(
+                    settings.get(CONF_FOLLOW_UP_ENABLED, DEFAULT_FOLLOW_UP_ENABLED)
+                ),
             ),
             f"View Assist response sequence ({category})",
         )
@@ -489,6 +526,8 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
         *,
         user_input: conversation.ConversationInput,
         configured_entity: str,
+        sequence_key: str,
+        sequence_generation: int,
         response_enabled: bool,
         response_path: str,
         response_text: str,
@@ -498,12 +537,17 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
         related_path: str | None,
         related_display_time: int,
         navigation_delay: float,
+        follow_up_enabled: bool,
     ) -> None:
         """Display a written response and then a category-specific view."""
         try:
             delay = max(0.0, min(float(navigation_delay), 10.0))
             if delay:
                 await asyncio.sleep(delay)
+            if not self._view_sequence_is_current(
+                sequence_key, sequence_generation
+            ):
+                return
 
             if not self.hass.services.has_service("view_assist", "navigate"):
                 _LOGGER.warning(
@@ -578,6 +622,10 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
 
             if shown_response and response_seconds:
                 await asyncio.sleep(response_seconds)
+                if not self._view_sequence_is_current(
+                    sequence_key, sequence_generation
+                ):
+                    return
 
             if shown_response and self.hass.services.has_service(
                 "view_assist", "set_state"
@@ -603,7 +651,7 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
                         {
                             "device": entity_id,
                             "path": resolved_related_path,
-                            "revert_timeout": related_seconds,
+                            "revert_timeout": 0,
                         },
                         user_input,
                     )
@@ -613,9 +661,39 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
                         resolved_related_path,
                         related_seconds,
                     )
+                    if related_seconds == 0:
+                        return
+                    await asyncio.sleep(related_seconds)
+                    if follow_up_enabled:
+                        await self._async_wait_for_follow_up_turn(
+                            entity_id, sequence_key, sequence_generation
+                        )
+                    if not self._view_sequence_is_current(
+                        sequence_key, sequence_generation
+                    ):
+                        _LOGGER.debug(
+                            "Keeping the newer View Assist sequence active on %s",
+                            entity_id,
+                        )
+                        return
+                    await self._async_call_view_assist_service(
+                        "navigate",
+                        {
+                            "device": entity_id,
+                            "path": "home",
+                            "revert_timeout": 0,
+                        },
+                        user_input,
+                    )
+                    _LOGGER.info(
+                        "Returned View Assist entity %s to home after follow-up window",
+                        entity_id,
+                    )
                     return
 
-            if shown_response:
+            if shown_response and self._view_sequence_is_current(
+                sequence_key, sequence_generation
+            ):
                 await self._async_call_view_assist_service(
                     "navigate",
                     {
@@ -629,6 +707,90 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
             raise
         except Exception:  # noqa: BLE001 - visual feedback must not break TTS.
             _LOGGER.exception("View Assist response sequence failed")
+
+    async def _async_wait_for_follow_up_turn(
+        self,
+        view_assist_entity: str,
+        sequence_key: str,
+        sequence_generation: int,
+    ) -> None:
+        """Keep the related view visible while the user is answering."""
+        elapsed = 0.0
+        while (
+            elapsed < 15.0
+            and self._view_sequence_is_current(
+                sequence_key, sequence_generation
+            )
+            and self._view_assist_pipeline_is_active(view_assist_entity)
+        ):
+            await asyncio.sleep(0.25)
+            elapsed += 0.25
+
+    def _view_assist_pipeline_is_active(self, entity_id: str) -> bool:
+        """Return whether the linked microphone is listening or processing."""
+        state = self.hass.states.get(entity_id)
+        if state is None:
+            return False
+        mic_entity_id = state.attributes.get("mic_device")
+        if not mic_entity_id:
+            return False
+        mic_state = self.hass.states.get(str(mic_entity_id))
+        if mic_state is None:
+            return False
+        active_states = {
+            "listening",
+            "processing",
+            "responding",
+            "intent-processing",
+            "stt",
+            "stt-listening",
+            "sst-listening",
+            "vad",
+            "start",
+        }
+        return str(mic_state.state).casefold() in active_states
+
+    def _view_sequence_key(
+        self,
+        user_input: conversation.ConversationInput,
+        configured_entity: str | None,
+    ) -> str:
+        """Return a stable key for one satellite's visual sequence."""
+        if configured_entity and configured_entity != VIEW_ASSIST_AUTO_ENTITY:
+            return f"entity:{configured_entity}"
+        satellite_id = getattr(user_input, "satellite_id", None)
+        if satellite_id:
+            return f"satellite:{satellite_id}"
+        device_id = getattr(user_input, "device_id", None)
+        if device_id:
+            return f"device:{device_id}"
+        return "default"
+
+    def _invalidate_view_sequence(
+        self,
+        user_input: conversation.ConversationInput,
+        configured_entity: str | None,
+    ) -> None:
+        """Prevent an older sequence from returning the display to home."""
+        key = self._view_sequence_key(user_input, configured_entity)
+        self._view_sequence_generation[key] = (
+            self._view_sequence_generation.get(key, 0) + 1
+        )
+
+    def _begin_view_sequence(
+        self,
+        user_input: conversation.ConversationInput,
+        configured_entity: str | None,
+    ) -> tuple[str, int]:
+        """Start and identify the newest visual sequence for a satellite."""
+        key = self._view_sequence_key(user_input, configured_entity)
+        generation = self._view_sequence_generation.get(key, 0) + 1
+        self._view_sequence_generation[key] = generation
+        return key, generation
+
+    def _view_sequence_is_current(self, key: str, generation: int) -> bool:
+        """Return whether a delayed visual action still belongs to the latest turn."""
+        return self._view_sequence_generation.get(key) == generation
 
     async def _async_call_view_assist_service(
         self,
@@ -1018,6 +1180,8 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
     def _wrap_downstream_result(
         result: conversation.ConversationResult,
         base_conversation_id: str,
+        *,
+        continue_conversation: bool | None = None,
     ) -> conversation.ConversationResult:
         """Return a destination response while preserving the router session ID."""
         result_kwargs: dict[str, Any] = {
@@ -1028,8 +1192,10 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
             conversation.ConversationResult
         ).parameters
         if "continue_conversation" in result_signature:
-            result_kwargs["continue_conversation"] = getattr(
-                result, "continue_conversation", False
+            result_kwargs["continue_conversation"] = (
+                getattr(result, "continue_conversation", False)
+                if continue_conversation is None
+                else continue_conversation
             )
 
         return conversation.ConversationResult(**result_kwargs)
