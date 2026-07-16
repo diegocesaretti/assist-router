@@ -33,6 +33,10 @@ from .const import (
     CONF_VIEW_ASSIST_ENTITY,
     CONF_VIEW_NAVIGATION_DELAY,
     CONF_VIEW_REVERT_TIMEOUT,
+    CONF_RESPONSE_VIEW_ENABLED,
+    CONF_RESPONSE_VIEW_PATH,
+    CONF_RESPONSE_DISPLAY_TIME,
+    CONF_RELATED_VIEW_DISPLAY_TIME,
     DEFAULT_END_PHRASES,
     DEFAULT_END_RESPONSE,
     DEFAULT_END_VIEW_HOME,
@@ -45,6 +49,10 @@ from .const import (
     DEFAULT_VIEW_ASSIST_ENTITY,
     DEFAULT_VIEW_NAVIGATION_DELAY,
     DEFAULT_VIEW_REVERT_TIMEOUT,
+    DEFAULT_RESPONSE_VIEW_ENABLED,
+    DEFAULT_RESPONSE_VIEW_PATH,
+    DEFAULT_RESPONSE_DISPLAY_TIME,
+    DEFAULT_RELATED_VIEW_DISPLAY_TIME,
     LEGACY_DEFAULT_KEYWORDS_0_1_3,
     ROUTE_DOMOTICS,
     ROUTE_OPENCLAW,
@@ -181,17 +189,26 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
                     DEFAULT_OPENCLAW_VIEW_PATH,
                 )
             ).strip()
-            if (
-                settings.get(
-                    CONF_OPENCLAW_VIEW_ENABLED,
-                    DEFAULT_OPENCLAW_VIEW_ENABLED,
-                )
-                and openclaw_view_path
+            if settings.get(
+                CONF_VIEW_ASSIST_ENABLED,
+                DEFAULT_VIEW_ASSIST_ENABLED,
             ):
-                self._schedule_view_assist_navigation(
+                related_path = (
+                    openclaw_view_path
+                    if settings.get(
+                        CONF_OPENCLAW_VIEW_ENABLED,
+                        DEFAULT_OPENCLAW_VIEW_ENABLED,
+                    )
+                    and openclaw_view_path
+                    else None
+                )
+                self._schedule_view_assist_sequence(
                     user_input=user_input,
                     settings=settings,
-                    path=openclaw_view_path,
+                    response_text=(
+                        acknowledgement or DEFAULT_OPENCLAW_ACK_MESSAGE
+                    ),
+                    related_path=related_path,
                     category="openclaw",
                 )
 
@@ -214,13 +231,14 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
         ):
             response_text = self._extract_response_text(result)
             view_match = match_view(response_text, user_input.text, settings)
+            self._schedule_view_assist_sequence(
+                user_input=user_input,
+                settings=settings,
+                response_text=response_text,
+                related_path=view_match.path if view_match is not None else None,
+                category=view_match.slug if view_match is not None else "response_only",
+            )
             if view_match is not None:
-                self._schedule_view_assist_navigation(
-                    user_input=user_input,
-                    settings=settings,
-                    path=view_match.path,
-                    category=view_match.slug,
-                )
                 _LOGGER.debug(
                     "Matched View Assist category %s: response hits=%s, "
                     "request hits=%s, configured path=%s",
@@ -250,6 +268,234 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
             return
 
         self.hass.async_create_task(coroutine, name)
+
+    def _schedule_view_assist_sequence(
+        self,
+        *,
+        user_input: conversation.ConversationInput,
+        settings: dict[str, Any],
+        response_text: str,
+        related_path: str | None,
+        category: str,
+    ) -> None:
+        """Show the written reply, then open the related View Assist view."""
+        if not settings.get(
+            CONF_VIEW_ASSIST_ENABLED,
+            DEFAULT_VIEW_ASSIST_ENABLED,
+        ):
+            return
+
+        response_enabled = bool(
+            settings.get(
+                CONF_RESPONSE_VIEW_ENABLED,
+                DEFAULT_RESPONSE_VIEW_ENABLED,
+            )
+        )
+        clean_response = response_text.strip()
+        clean_related_path = related_path.strip() if related_path else None
+        if not (response_enabled and clean_response) and not clean_related_path:
+            return
+
+        self._create_background_task(
+            self._async_show_response_then_view(
+                user_input=user_input,
+                configured_entity=settings.get(
+                    CONF_VIEW_ASSIST_ENTITY,
+                    DEFAULT_VIEW_ASSIST_ENTITY,
+                ),
+                response_enabled=response_enabled,
+                response_path=str(
+                    settings.get(
+                        CONF_RESPONSE_VIEW_PATH,
+                        DEFAULT_RESPONSE_VIEW_PATH,
+                    )
+                ).strip(),
+                response_text=clean_response,
+                response_display_time=settings.get(
+                    CONF_RESPONSE_DISPLAY_TIME,
+                    DEFAULT_RESPONSE_DISPLAY_TIME,
+                ),
+                related_path=clean_related_path,
+                related_display_time=settings.get(
+                    CONF_RELATED_VIEW_DISPLAY_TIME,
+                    DEFAULT_RELATED_VIEW_DISPLAY_TIME,
+                ),
+                navigation_delay=settings.get(
+                    CONF_VIEW_NAVIGATION_DELAY,
+                    DEFAULT_VIEW_NAVIGATION_DELAY,
+                ),
+            ),
+            f"View Assist response sequence ({category})",
+        )
+
+    async def _async_show_response_then_view(
+        self,
+        *,
+        user_input: conversation.ConversationInput,
+        configured_entity: str,
+        response_enabled: bool,
+        response_path: str,
+        response_text: str,
+        response_display_time: float,
+        related_path: str | None,
+        related_display_time: int,
+        navigation_delay: float,
+    ) -> None:
+        """Display a written response and then a category-specific view."""
+        try:
+            delay = max(0.0, min(float(navigation_delay), 10.0))
+            if delay:
+                await asyncio.sleep(delay)
+
+            if not self.hass.services.has_service("view_assist", "navigate"):
+                _LOGGER.warning(
+                    "View Assist response sequence skipped: service "
+                    "view_assist.navigate is not available"
+                )
+                return
+
+            entity_id = self._resolve_view_assist_entity(
+                user_input,
+                configured_entity,
+            )
+            if entity_id is None:
+                _LOGGER.warning(
+                    "View Assist response sequence skipped: no satellite matched "
+                    "the conversation device"
+                )
+                return
+
+            entity_state = self.hass.states.get(entity_id)
+            shown_response = False
+            response_seconds = max(0.0, min(float(response_display_time), 30.0))
+            related_seconds = max(0, min(int(related_display_time), 120))
+
+            if response_enabled and response_text and response_path:
+                resolved_response_path = resolve_view_path(
+                    response_path, entity_state
+                )
+                if resolved_response_path:
+                    await self._async_call_view_assist_service(
+                        "navigate",
+                        {
+                            "device": entity_id,
+                            "path": resolved_response_path,
+                            "revert_timeout": 0,
+                        },
+                        user_input,
+                    )
+                    if self.hass.services.has_service(
+                        "view_assist", "set_state"
+                    ):
+                        await self._async_call_view_assist_service(
+                            "set_state",
+                            {
+                                "entity_id": entity_id,
+                                "title": "Respuesta",
+                                "message": response_text,
+                                "message_font_size": self._message_font_size(
+                                    response_text
+                                ),
+                            },
+                            user_input,
+                        )
+                        shown_response = True
+                        _LOGGER.info(
+                            "Showing written response on %s at %s for %.1fs",
+                            entity_id,
+                            resolved_response_path,
+                            response_seconds,
+                        )
+                    else:
+                        _LOGGER.warning(
+                            "View Assist written response skipped: service "
+                            "view_assist.set_state is not available"
+                        )
+
+            if shown_response and response_seconds:
+                await asyncio.sleep(response_seconds)
+
+            if shown_response and self.hass.services.has_service(
+                "view_assist", "set_state"
+            ):
+                await self._async_call_view_assist_service(
+                    "set_state",
+                    {
+                        "entity_id": entity_id,
+                        "title": "",
+                        "message": "",
+                        "message_font_size": "",
+                    },
+                    user_input,
+                )
+
+            if related_path:
+                resolved_related_path = resolve_view_path(
+                    related_path, entity_state
+                )
+                if resolved_related_path:
+                    await self._async_call_view_assist_service(
+                        "navigate",
+                        {
+                            "device": entity_id,
+                            "path": resolved_related_path,
+                            "revert_timeout": related_seconds,
+                        },
+                        user_input,
+                    )
+                    _LOGGER.info(
+                        "Showing related View Assist view on %s at %s for %ss",
+                        entity_id,
+                        resolved_related_path,
+                        related_seconds,
+                    )
+                    return
+
+            if shown_response:
+                await self._async_call_view_assist_service(
+                    "navigate",
+                    {
+                        "device": entity_id,
+                        "path": "home",
+                        "revert_timeout": 0,
+                    },
+                    user_input,
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 - visual feedback must not break TTS.
+            _LOGGER.exception("View Assist response sequence failed")
+
+    async def _async_call_view_assist_service(
+        self,
+        service: str,
+        service_data: dict[str, Any],
+        user_input: conversation.ConversationInput,
+    ) -> None:
+        """Call a View Assist service across Home Assistant API versions."""
+        call_kwargs: dict[str, Any] = {
+            "domain": "view_assist",
+            "service": service,
+            "service_data": service_data,
+            "blocking": True,
+            "context": user_input.context,
+        }
+        supported = inspect.signature(
+            self.hass.services.async_call
+        ).parameters
+        await self.hass.services.async_call(
+            **{
+                key: value
+                for key, value in call_kwargs.items()
+                if key in supported
+            }
+        )
+
+    @staticmethod
+    def _message_font_size(message: str) -> str:
+        """Match View Assist's standard text sizing for AI responses."""
+        word_count = len(message.split())
+        return ["10vw", "8vw", "6vw", "4vw"][min(word_count // 6, 3)]
 
     def _schedule_view_assist_navigation(
         self,

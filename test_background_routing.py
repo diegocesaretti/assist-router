@@ -120,6 +120,10 @@ class ConfigEntry:
             ),
             "view_revert_timeout": 20,
             "view_navigation_delay": 0,
+            "view_response_enabled": True,
+            "view_response_path": "info",
+            "view_response_display_time": 0,
+            "view_related_display_time": 4,
             "openclaw_view_path": "/view-assist/info",
             "end_phrases": "chau\ngracias\nok\nbueno\nhasta luego",
             "end_response": "Hasta luego.",
@@ -234,7 +238,7 @@ class FakeServices:
         self.calls = []
 
     def has_service(self, domain, service):
-        return domain == "view_assist" and service == "navigate"
+        return domain == "view_assist" and service in {"navigate", "set_state"}
 
     async def async_call(
         self,
@@ -311,10 +315,17 @@ async def main():
     await asyncio.gather(*hass.tasks)
     assert CALLS[-1]["agent_id"] == "openclaw"
     assert "enviá el resultado al usuario por WhatsApp" in CALLS[-1]["text"]
-    assert hass.services.calls[-1]["service_data"]["path"] == "/view-assist/info"
-    assert hass.services.calls[-1]["service_data"]["device"] == (
+    navigate_calls = [
+        call for call in hass.services.calls if call["service"] == "navigate"
+    ]
+    set_state_calls = [
+        call for call in hass.services.calls if call["service"] == "set_state"
+    ]
+    assert navigate_calls[-1]["service_data"]["path"] == "/view-assist/info"
+    assert navigate_calls[-1]["service_data"]["device"] == (
         "sensor.viewassist_kitchen"
     )
+    assert set_state_calls[-1]["service_data"]["message"] == ""
 
     previous_task_count = len(hass.tasks)
     domotics_result = await router.async_process(
@@ -330,10 +341,21 @@ async def main():
 
     new_tasks = hass.tasks[previous_task_count:]
     await asyncio.gather(*new_tasks)
-    assert hass.services.calls[-1]["service_data"]["path"] == (
+    domotics_navigate_calls = [
+        call for call in hass.services.calls if call["service"] == "navigate"
+    ]
+    assert domotics_navigate_calls[-1]["service_data"]["path"] == (
         "/view-assist/intent"
     )
-    assert hass.services.calls[-1]["service_data"]["revert_timeout"] == 20
+    assert domotics_navigate_calls[-1]["service_data"]["revert_timeout"] == 4
+    domotics_set_state_calls = [
+        call for call in hass.services.calls if call["service"] == "set_state"
+    ]
+    assert any(
+        call["service_data"].get("message")
+        == "La luz del living quedó encendida"
+        for call in domotics_set_state_calls
+    )
 
 
     previous_call_count = len(CALLS)

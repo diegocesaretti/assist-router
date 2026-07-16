@@ -47,6 +47,11 @@ assert "conversation" in menu
 assert "conversation" in strings["options"]["step"]
 assert "end_phrases" in strings["options"]["step"]["conversation"]["data"]
 assert "view_rules" not in menu
+general = strings["options"]["step"]["view_assist"]["data"]
+assert "view_response_enabled" in general
+assert "view_response_path" in general
+assert "view_response_display_time" in general
+assert "view_related_display_time" in general
 assert "categoria | /ruta | palabras" not in json.dumps(strings, ensure_ascii=False)
 
 print("Configuration structure tests: OK")

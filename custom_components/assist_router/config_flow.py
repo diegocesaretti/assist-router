@@ -37,6 +37,10 @@ from .const import (
     CONF_VIEW_ASSIST_ENTITY,
     CONF_VIEW_NAVIGATION_DELAY,
     CONF_VIEW_REVERT_TIMEOUT,
+    CONF_RESPONSE_VIEW_ENABLED,
+    CONF_RESPONSE_VIEW_PATH,
+    CONF_RESPONSE_DISPLAY_TIME,
+    CONF_RELATED_VIEW_DISPLAY_TIME,
     CONF_VIEW_RULES,
     DEFAULT_END_PHRASES,
     DEFAULT_END_RESPONSE,
@@ -50,6 +54,10 @@ from .const import (
     DEFAULT_VIEW_ASSIST_ENTITY,
     DEFAULT_VIEW_NAVIGATION_DELAY,
     DEFAULT_VIEW_REVERT_TIMEOUT,
+    DEFAULT_RESPONSE_VIEW_ENABLED,
+    DEFAULT_RESPONSE_VIEW_PATH,
+    DEFAULT_RESPONSE_DISPLAY_TIME,
+    DEFAULT_RELATED_VIEW_DISPLAY_TIME,
     DOMAIN,
     LEGACY_DEFAULT_KEYWORDS_0_1_3,
     VIEW_ASSIST_AUTO_ENTITY,
@@ -171,8 +179,11 @@ def _base_defaults() -> dict[str, Any]:
         CONF_OPENCLAW_BACKGROUND_INSTRUCTION: DEFAULT_OPENCLAW_BACKGROUND_INSTRUCTION,
         CONF_VIEW_ASSIST_ENABLED: DEFAULT_VIEW_ASSIST_ENABLED,
         CONF_VIEW_ASSIST_ENTITY: DEFAULT_VIEW_ASSIST_ENTITY,
-        CONF_VIEW_REVERT_TIMEOUT: DEFAULT_VIEW_REVERT_TIMEOUT,
         CONF_VIEW_NAVIGATION_DELAY: DEFAULT_VIEW_NAVIGATION_DELAY,
+        CONF_RESPONSE_VIEW_ENABLED: DEFAULT_RESPONSE_VIEW_ENABLED,
+        CONF_RESPONSE_VIEW_PATH: DEFAULT_RESPONSE_VIEW_PATH,
+        CONF_RESPONSE_DISPLAY_TIME: DEFAULT_RESPONSE_DISPLAY_TIME,
+        CONF_RELATED_VIEW_DISPLAY_TIME: DEFAULT_RELATED_VIEW_DISPLAY_TIME,
         CONF_OPENCLAW_VIEW_ENABLED: DEFAULT_OPENCLAW_VIEW_ENABLED,
         CONF_OPENCLAW_VIEW_PATH_V2: DEFAULT_OPENCLAW_VIEW_PATH,
         **view_defaults(),
@@ -293,9 +304,27 @@ def _view_assist_schema(
                 fallback=VIEW_ASSIST_AUTO_ENTITY,
             ): vol.In(view_assist_options),
             vol.Required(
-                CONF_VIEW_REVERT_TIMEOUT,
+                CONF_RESPONSE_VIEW_ENABLED,
                 default=defaults.get(
-                    CONF_VIEW_REVERT_TIMEOUT, DEFAULT_VIEW_REVERT_TIMEOUT
+                    CONF_RESPONSE_VIEW_ENABLED, DEFAULT_RESPONSE_VIEW_ENABLED
+                ),
+            ): bool,
+            vol.Required(
+                CONF_RESPONSE_VIEW_PATH,
+                default=defaults.get(
+                    CONF_RESPONSE_VIEW_PATH, DEFAULT_RESPONSE_VIEW_PATH
+                ),
+            ): TextSelector(TextSelectorConfig(multiline=False)),
+            vol.Required(
+                CONF_RESPONSE_DISPLAY_TIME,
+                default=defaults.get(
+                    CONF_RESPONSE_DISPLAY_TIME, DEFAULT_RESPONSE_DISPLAY_TIME
+                ),
+            ): vol.All(vol.Coerce(float), vol.Range(min=0, max=30)),
+            vol.Required(
+                CONF_RELATED_VIEW_DISPLAY_TIME,
+                default=defaults.get(
+                    CONF_RELATED_VIEW_DISPLAY_TIME, DEFAULT_RELATED_VIEW_DISPLAY_TIME
                 ),
             ): vol.All(vol.Coerce(int), vol.Range(min=0, max=120)),
             vol.Required(
@@ -306,6 +335,25 @@ def _view_assist_schema(
             ): vol.All(vol.Coerce(float), vol.Range(min=0, max=10)),
         }
     )
+
+
+def _validate_view_assist(user_input: dict[str, Any]) -> dict[str, str]:
+    """Validate general View Assist response sequencing options."""
+    errors: dict[str, str] = {}
+    if user_input[CONF_RESPONSE_VIEW_ENABLED] and not validate_view_path(
+        user_input[CONF_RESPONSE_VIEW_PATH]
+    ):
+        errors[CONF_RESPONSE_VIEW_PATH] = "invalid_view_path"
+    return errors
+
+
+def _normalize_view_assist(user_input: dict[str, Any]) -> dict[str, Any]:
+    """Normalize the response view path."""
+    normalized = dict(user_input)
+    normalized[CONF_RESPONSE_VIEW_PATH] = normalize_view_path(
+        normalized[CONF_RESPONSE_VIEW_PATH]
+    )
+    return normalized
 
 
 def _view_schema(defaults: dict[str, Any], slug: str) -> vol.Schema:
@@ -477,16 +525,20 @@ class AssistRouterConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Configure general View Assist behavior; categories use safe defaults."""
         options = _view_assist_entity_options(self.hass)
+        errors: dict[str, str] = {}
         if user_input is not None:
-            self._pending.update(user_input)
-            return self.async_create_entry(
-                title="Assist Router",
-                data=canonicalize_view_settings(self._pending),
-            )
+            errors = _validate_view_assist(user_input)
+            if not errors:
+                self._pending.update(_normalize_view_assist(user_input))
+                return self.async_create_entry(
+                    title="Assist Router",
+                    data=canonicalize_view_settings(self._pending),
+                )
 
         return self.async_show_form(
             step_id="view_assist",
-            data_schema=_view_assist_schema(self._pending, options),
+            data_schema=_view_assist_schema(user_input or self._pending, options),
+            errors=errors,
         )
 
 
@@ -501,6 +553,7 @@ class AssistRouterOptionsFlow(OptionsFlow):
         settings.update(changes)
         settings.pop(CONF_VIEW_RULES, None)
         settings.pop(CONF_OPENCLAW_VIEW_PATH, None)
+        settings.pop(CONF_VIEW_REVERT_TIMEOUT, None)
         settings = canonicalize_view_settings(settings)
         return self.async_create_entry(title="", data=settings)
 
@@ -571,14 +624,18 @@ class AssistRouterOptionsFlow(OptionsFlow):
     async def async_step_view_assist(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
         if user_input is not None:
-            return self._save(user_input)
+            errors = _validate_view_assist(user_input)
+            if not errors:
+                return self._save(_normalize_view_assist(user_input))
         return self.async_show_form(
             step_id="view_assist",
             data_schema=_view_assist_schema(
-                _effective_settings(self._entry),
+                user_input or _effective_settings(self._entry),
                 _view_assist_entity_options(self.hass),
             ),
+            errors=errors,
         )
 
 

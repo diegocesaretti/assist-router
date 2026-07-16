@@ -1,6 +1,6 @@
-# Assist Router 0.2.1 para Home Assistant
+# Assist Router 0.2.2 para Home Assistant
 
-Agente frontal para Assist que deriva el texto del STT a un agente doméstico o a OpenClaw. También puede abrir vistas de View Assist relacionadas con la respuesta y cerrar explícitamente una conversación de seguimiento.
+Agente frontal para Assist que deriva el texto del STT a un agente doméstico o a OpenClaw. También integra una secuencia visual con View Assist y permite cerrar explícitamente una conversación de seguimiento.
 
 ## Flujo
 
@@ -13,20 +13,46 @@ STT
      ├─ contiene una palabra de domótica
      │   └─ Gemini / agente doméstico
      │       ├─ devuelve la respuesta para TTS
+     │       ├─ muestra la respuesta escrita
      │       └─ abre la vista relacionada
      └─ no contiene palabras de domótica
          └─ responde inmediatamente y ejecuta OpenClaw en segundo plano
 ```
 
-## Novedades de la versión 0.2.1
+## Novedades de la versión 0.2.2
 
-- Frases configurables para cerrar una conversación: `chau`, `gracias`, `ok`, `bueno` y `hasta luego`.
-- La frase de cierre se compara contra el mensaje completo; `bueno, prendé la luz` no cierra la conversación.
-- Respuesta de cierre configurable, que también puede dejarse vacía.
-- Opción para volver a la pantalla inicial de View Assist al cerrar.
-- La navegación usa primero el resolvedor oficial de la integración View Assist.
-- Nueva demora configurable antes de navegar, para impedir que el propio ciclo del pipeline pise la vista elegida.
-- Registros más claros con entidad, ruta y motivo de cualquier fallo de navegación.
+- La respuesta del agente se muestra escrita en la vista `info` antes de abrir la vista temática.
+- Tiempo configurable para la respuesta escrita; valor predeterminado: **3 segundos**.
+- Tiempo configurable para la vista relacionada; valor predeterminado: **4 segundos**.
+- Ruta configurable para la vista que muestra la respuesta escrita.
+- La secuencia limpia el mensaje antes de cambiar a clima, cámaras, domótica u otra vista.
+- Si no existe una vista relacionada, vuelve a inicio después de mostrar la respuesta.
+- La respuesta de OpenClaw también puede mostrarse escrita antes de abrir su vista de procesamiento.
+
+## Secuencia visual
+
+```text
+Respuesta del agente
+        ↓
+Demora inicial de navegación (0,8 s)
+        ↓
+Vista info + respuesta escrita (3 s)
+        ↓
+Vista relacionada, por ejemplo weather o intent (4 s)
+        ↓
+Retorno de View Assist
+```
+
+Para mostrar el texto, el router primero navega a la vista configurada y después llama a `view_assist.set_state` con:
+
+```yaml
+entity_id: sensor.view_assist_del_satelite
+title: Respuesta
+message: La luz del living quedó encendida
+message_font_size: 6vw
+```
+
+Luego llama a `view_assist.navigate` para abrir la vista relacionada.
 
 ## Configuración
 
@@ -36,13 +62,26 @@ Desde:
 Ajustes → Dispositivos y servicios → Assist Router → Configurar
 ```
 
-se muestran secciones separadas:
+En **View Assist: ajustes generales** se pueden cambiar:
 
-- **Agentes y filtro principal**: agentes Gemini/OpenClaw y palabras de domótica.
-- **Cierre de conversación**: frases, respuesta y retorno a inicio.
-- **OpenClaw**: confirmación inmediata, instrucción añadida y vista de procesamiento.
-- **View Assist: ajustes generales**: satélite, retorno y demora de navegación.
-- Una pantalla separada para cada categoría visual.
+- Satélite View Assist.
+- Mostrar o no la respuesta escrita.
+- Vista para mostrar la respuesta; predeterminado: `info`.
+- Segundos de respuesta escrita; predeterminado: `3`.
+- Segundos de la vista relacionada; predeterminado: `4`.
+- Demora inicial de navegación; predeterminado: `0.8`.
+
+Las rutas pueden ser relativas:
+
+```text
+info
+weather
+camera
+music
+intent
+```
+
+El router las combina con la ruta base real del dashboard del satélite. También acepta rutas absolutas como `/view-assist/info`.
 
 ## Frases de cierre
 
@@ -56,7 +95,7 @@ bueno
 hasta luego
 ```
 
-La coincidencia ignora mayúsculas, tildes y signos, pero exige que toda la frase coincida. Por ejemplo:
+La coincidencia ignora mayúsculas, tildes y signos, pero exige que toda la frase coincida.
 
 ```text
 “¡Gracias!”          → cierra
@@ -65,63 +104,14 @@ La coincidencia ignora mayúsculas, tildes y signos, pero exige que toda la fras
 “Bueno, prendé luz”  → no cierra
 ```
 
-Al cerrar, el resultado vuelve con `continue_conversation = false` y sin conservar el identificador de la conversación.
-
-## Navegación de View Assist
-
-El router llama a:
-
-```text
-view_assist.navigate
-```
-
-con:
-
-```yaml
-device: sensor.view_assist_del_satelite
-path: /view-assist/weather
-revert_timeout: 20
-```
-
-La versión 0.2.1 primero intenta identificar el satélite mediante la función interna de View Assist `get_entity_id_from_conversation_device_id`. Si no está disponible, usa el dispositivo, la entidad del satélite y los atributos `mic_device_id`, `voice_device_id` y `mic_device`.
-
-### Demora antes de navegar
-
-El valor predeterminado es:
-
-```text
-0,8 segundos
-```
-
-La espera ocurre después de recibir la respuesta del agente y antes de ejecutar `view_assist.navigate`. Esto evita una condición de carrera en la que View Assist actualiza su pantalla al terminar el procesamiento y pisa una navegación demasiado temprana.
-
-Si una vista todavía no abre, elegí temporalmente un satélite fijo en vez de **Automático** y revisá los registros.
-
-## Rutas relativas
-
-Las rutas pueden escribirse como nombres simples:
-
-```text
-weather
-camera
-music
-intent
-```
-
-El router las combina con la ruta base del dashboard del satélite. También se aceptan rutas absolutas como:
-
-```text
-/view-assist/weather
-```
-
 ## OpenClaw
 
 Cuando no hay palabras de domótica:
 
 1. Home Assistant reproduce inmediatamente la confirmación configurada.
-2. OpenClaw recibe la solicitud en segundo plano.
-3. El pipeline de voz queda libre.
-4. Opcionalmente se abre una vista de procesamiento.
+2. Esa confirmación puede mostrarse escrita durante el tiempo configurado.
+3. OpenClaw recibe la solicitud en segundo plano.
+4. Se abre la vista de procesamiento configurada.
 5. OpenClaw entrega el resultado por WhatsApp según la instrucción configurada.
 
 ## Instalación o actualización
@@ -134,21 +124,28 @@ Cuando no hay palabras de domótica:
 ```
 
 3. Reiniciar Home Assistant.
-4. Abrir la configuración de Assist Router.
-5. En **View Assist: ajustes generales**, confirmar el satélite y dejar inicialmente la demora en `0.8`.
+4. Abrir **Assist Router → Configurar → View Assist: ajustes generales**.
+5. Confirmar inicialmente estos valores:
+
+```text
+Mostrar la respuesta escrita: activado
+Vista para mostrar la respuesta: info
+Segundos de respuesta escrita: 3
+Segundos de la vista relacionada: 4
+Demora inicial: 0.8
+```
 
 No hace falta borrar ni volver a crear la entrada de integración.
 
 ## Diagnóstico
 
-En **Ajustes → Sistema → Registros**, buscá `assist_router`. Los mensajes importantes incluyen:
+En **Ajustes → Sistema → Registros**, buscar `assist_router`. La versión registra:
 
 ```text
-Navigated View Assist entity ... to ...
-Configured View Assist entity ... is unavailable
-Could not select a View Assist satellite automatically ...
-View Assist navigation skipped: service view_assist.navigate is not available
-View Assist navigation failed for configured path ...
+Showing written response on ...
+Showing related View Assist view on ...
+View Assist response sequence skipped ...
+View Assist response sequence failed
 ```
 
 Un fallo visual no interrumpe la respuesta hablada ni el envío a OpenClaw.

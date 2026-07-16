@@ -34,18 +34,24 @@
       },
       "view_assist": {
         "title": "View Assist general settings",
-        "description": "Choose the satellite and revert timeout. Individual views can be edited later.",
+        "description": "Choose the satellite and visual sequence: show the written reply first, then the related view.",
         "data": {
           "view_assist_enabled": "Enable View Assist navigation",
           "view_assist_entity": "View Assist satellite",
-          "view_revert_timeout": "Seconds before reverting",
+          "view_response_enabled": "Show written response",
+          "view_response_path": "Response display view",
+          "view_response_display_time": "Written response seconds",
+          "view_related_display_time": "Related view seconds",
           "view_navigation_delay": "Delay before opening the view"
         },
         "data_description": {
           "view_assist_enabled": "Open a view related to the final answer.",
           "view_assist_entity": "Automatic uses the satellite that originated the conversation.",
-          "view_revert_timeout": "Use 0 to stay on the selected view.",
-          "view_navigation_delay": "Wait briefly so View Assist does not overwrite navigation while the pipeline is finishing. 0.8 seconds is recommended."
+          "view_response_enabled": "Shows the agent response as text before opening the category view.",
+          "view_response_path": "Use a relative name such as 'info' or a full path.",
+          "view_response_display_time": "How long the written response remains visible. Recommended: 3 seconds.",
+          "view_related_display_time": "How long the weather, camera, domotics, or other related view remains visible. Use 0 to disable automatic return.",
+          "view_navigation_delay": "Initial delay so View Assist can finish the pipeline state transition. Recommended: 0.8 seconds."
         }
       }
     },
@@ -117,18 +123,24 @@
       },
       "view_assist": {
         "title": "View Assist: general settings",
-        "description": "Choose the satellite, revert timeout, and a brief delay so navigation runs after View Assist processing.",
+        "description": "Choose the satellite and visual sequence: show the written reply first, then the related view.",
         "data": {
           "view_assist_enabled": "Enable View Assist navigation",
           "view_assist_entity": "View Assist satellite",
-          "view_revert_timeout": "Seconds before reverting",
+          "view_response_enabled": "Show written response",
+          "view_response_path": "Response display view",
+          "view_response_display_time": "Written response seconds",
+          "view_related_display_time": "Related view seconds",
           "view_navigation_delay": "Delay before opening the view"
         },
         "data_description": {
           "view_assist_enabled": "Disable to keep spoken responses only.",
           "view_assist_entity": "Automatic uses the originating satellite.",
-          "view_revert_timeout": "Value passed to view_assist.navigate.",
-          "view_navigation_delay": "Seconds to wait before calling view_assist.navigate. Start with 0.8."
+          "view_response_enabled": "Shows the agent response as text before opening the category view.",
+          "view_response_path": "Use a relative name such as 'info' or a full path.",
+          "view_response_display_time": "How long the written response remains visible. Recommended: 3 seconds.",
+          "view_related_display_time": "How long the weather, camera, domotics, or other related view remains visible. Use 0 to disable automatic return.",
+          "view_navigation_delay": "Initial delay so View Assist can finish the pipeline state transition. Recommended: 0.8 seconds."
         }
       },
       "view_weather": {

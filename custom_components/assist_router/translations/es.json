@@ -34,18 +34,24 @@
       },
       "view_assist": {
         "title": "Ajustes generales de View Assist",
-        "description": "Elegí el satélite y el tiempo de retorno. Las vistas individuales se pueden ajustar después desde Configurar.",
+        "description": "Elegí el satélite y la secuencia visual: primero la respuesta escrita y después la vista relacionada.",
         "data": {
           "view_assist_enabled": "Activar navegación de View Assist",
           "view_assist_entity": "Satélite View Assist",
-          "view_revert_timeout": "Segundos antes de volver",
+          "view_response_enabled": "Mostrar la respuesta escrita",
+          "view_response_path": "Vista para mostrar la respuesta",
+          "view_response_display_time": "Segundos de respuesta escrita",
+          "view_related_display_time": "Segundos de la vista relacionada",
           "view_navigation_delay": "Demora antes de abrir la vista"
         },
         "data_description": {
           "view_assist_enabled": "Permite que el router abra una vista relacionada con la respuesta.",
           "view_assist_entity": "Automático intenta usar el mismo satélite que originó la conversación.",
-          "view_revert_timeout": "Usá 0 para no solicitar retorno automático.",
-          "view_navigation_delay": "Espera unos segundos para evitar que View Assist pise la navegación mientras termina el pipeline. El valor recomendado es 0,8."
+          "view_response_enabled": "Muestra la respuesta del agente como texto antes de abrir la vista temática.",
+          "view_response_path": "Usá un nombre relativo como 'info' o una ruta completa.",
+          "view_response_display_time": "Tiempo que permanece visible el texto. Valor recomendado: 3 segundos.",
+          "view_related_display_time": "Tiempo que permanece la vista de clima, cámaras, domótica, etc. Valor recomendado: 4 segundos. Usá 0 para que no vuelva automáticamente.",
+          "view_navigation_delay": "Espera inicial para que View Assist termine de procesar el pipeline. El valor recomendado es 0,8 segundos."
         }
       }
     },
@@ -117,18 +123,24 @@
       },
       "view_assist": {
         "title": "View Assist: ajustes generales",
-        "description": "Elegí el satélite, el retorno y una pequeña demora para que la navegación ocurra después del procesamiento de View Assist.",
+        "description": "Configurá cuánto tiempo se muestra la respuesta escrita y cuánto permanece después la vista relacionada.",
         "data": {
           "view_assist_enabled": "Activar navegación de View Assist",
           "view_assist_entity": "Satélite View Assist",
-          "view_revert_timeout": "Segundos antes de volver",
+          "view_response_enabled": "Mostrar la respuesta escrita",
+          "view_response_path": "Vista para mostrar la respuesta",
+          "view_response_display_time": "Segundos de respuesta escrita",
+          "view_related_display_time": "Segundos de la vista relacionada",
           "view_navigation_delay": "Demora antes de abrir la vista"
         },
         "data_description": {
           "view_assist_enabled": "Desactivá esta opción para conservar solamente las respuestas habladas.",
           "view_assist_entity": "Automático usa el satélite que escuchó. Elegí uno fijo si tu micrófono no informa su identidad.",
-          "view_revert_timeout": "Valor enviado a view_assist.navigate. Usá 0 para permanecer en la vista.",
-          "view_navigation_delay": "Segundos de espera antes de llamar a view_assist.navigate. Usá 0,8 como punto de partida."
+          "view_response_enabled": "Muestra la respuesta del agente como texto antes de abrir la vista temática.",
+          "view_response_path": "Usá un nombre relativo como 'info' o una ruta completa.",
+          "view_response_display_time": "Tiempo que permanece visible el texto. Valor recomendado: 3 segundos.",
+          "view_related_display_time": "Tiempo que permanece la vista de clima, cámaras, domótica, etc. Valor recomendado: 4 segundos. Usá 0 para que no vuelva automáticamente.",
+          "view_navigation_delay": "Espera inicial para que View Assist termine de procesar el pipeline. El valor recomendado es 0,8 segundos."
         }
       },
       "view_weather": {
