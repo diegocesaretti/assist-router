@@ -8,9 +8,14 @@ CONF_KEYWORDS = "keywords"
 CONF_OPENCLAW_ACK_MESSAGE = "openclaw_ack_message"
 CONF_OPENCLAW_BACKGROUND_INSTRUCTION = "openclaw_background_instruction"
 
+CONF_END_PHRASES = "end_phrases"
+CONF_END_RESPONSE = "end_response"
+CONF_END_VIEW_HOME = "end_view_home"
+
 CONF_VIEW_ASSIST_ENABLED = "view_assist_enabled"
 CONF_VIEW_ASSIST_ENTITY = "view_assist_entity"
 CONF_VIEW_REVERT_TIMEOUT = "view_revert_timeout"
+CONF_VIEW_NAVIGATION_DELAY = "view_navigation_delay"
 
 # Legacy keys retained only so existing 0.1.x installations can be migrated.
 CONF_VIEW_RULES = "view_rules"
@@ -98,6 +103,14 @@ cerrar
 subir
 bajar"""
 
+DEFAULT_END_PHRASES = """chau
+gracias
+ok
+bueno
+hasta luego"""
+DEFAULT_END_RESPONSE = "Hasta luego."
+DEFAULT_END_VIEW_HOME = True
+
 DEFAULT_OPENCLAW_ACK_MESSAGE = "Dejame trabajar en eso y te aviso por WhatsApp."
 
 DEFAULT_OPENCLAW_BACKGROUND_INSTRUCTION = (
@@ -110,6 +123,7 @@ DEFAULT_OPENCLAW_BACKGROUND_INSTRUCTION = (
 DEFAULT_VIEW_ASSIST_ENABLED = True
 DEFAULT_VIEW_ASSIST_ENTITY = VIEW_ASSIST_AUTO_ENTITY
 DEFAULT_VIEW_REVERT_TIMEOUT = 20
+DEFAULT_VIEW_NAVIGATION_DELAY = 0.8
 DEFAULT_OPENCLAW_VIEW_ENABLED = True
 DEFAULT_OPENCLAW_VIEW_PATH = "info"
 

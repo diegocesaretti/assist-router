@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+from importlib import import_module
 import logging
 from typing import Any, Literal
 from uuid import uuid4
@@ -19,6 +20,9 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     CONF_DOMOTICS_AGENT,
+    CONF_END_PHRASES,
+    CONF_END_RESPONSE,
+    CONF_END_VIEW_HOME,
     CONF_KEYWORDS,
     CONF_OPENCLAW_ACK_MESSAGE,
     CONF_OPENCLAW_AGENT,
@@ -27,21 +31,26 @@ from .const import (
     CONF_OPENCLAW_VIEW_PATH_V2,
     CONF_VIEW_ASSIST_ENABLED,
     CONF_VIEW_ASSIST_ENTITY,
+    CONF_VIEW_NAVIGATION_DELAY,
     CONF_VIEW_REVERT_TIMEOUT,
+    DEFAULT_END_PHRASES,
+    DEFAULT_END_RESPONSE,
+    DEFAULT_END_VIEW_HOME,
     DEFAULT_KEYWORDS,
-    LEGACY_DEFAULT_KEYWORDS_0_1_3,
     DEFAULT_OPENCLAW_ACK_MESSAGE,
     DEFAULT_OPENCLAW_BACKGROUND_INSTRUCTION,
     DEFAULT_OPENCLAW_VIEW_ENABLED,
     DEFAULT_OPENCLAW_VIEW_PATH,
     DEFAULT_VIEW_ASSIST_ENABLED,
     DEFAULT_VIEW_ASSIST_ENTITY,
+    DEFAULT_VIEW_NAVIGATION_DELAY,
     DEFAULT_VIEW_REVERT_TIMEOUT,
+    LEGACY_DEFAULT_KEYWORDS_0_1_3,
     ROUTE_DOMOTICS,
     ROUTE_OPENCLAW,
     VIEW_ASSIST_AUTO_ENTITY,
 )
-from .routing import matches_domotics, migrate_default_keywords
+from .routing import matches_domotics, matches_end_phrase, migrate_default_keywords
 from .view_routing import apply_legacy_view_settings, match_view, resolve_view_path
 
 _LOGGER = logging.getLogger(__name__)
@@ -94,6 +103,23 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
             LEGACY_DEFAULT_KEYWORDS_0_1_3,
             DEFAULT_KEYWORDS,
         )
+
+        if matches_end_phrase(
+            user_input.text,
+            str(settings.get(CONF_END_PHRASES, DEFAULT_END_PHRASES)),
+        ):
+            if settings.get(CONF_END_VIEW_HOME, DEFAULT_END_VIEW_HOME):
+                self._schedule_view_assist_navigation(
+                    user_input=user_input,
+                    settings=settings,
+                    path="home",
+                    category="conversation_end",
+                )
+            return self._speech_result(
+                user_input,
+                str(settings.get(CONF_END_RESPONSE, DEFAULT_END_RESPONSE)).strip(),
+                conversation_id=None,
+            )
 
         if matches_domotics(user_input.text, keyword_text):
             target_agent_id = settings[CONF_DOMOTICS_AGENT]
@@ -252,6 +278,10 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
                     CONF_VIEW_REVERT_TIMEOUT,
                     DEFAULT_VIEW_REVERT_TIMEOUT,
                 ),
+                navigation_delay=settings.get(
+                    CONF_VIEW_NAVIGATION_DELAY,
+                    DEFAULT_VIEW_NAVIGATION_DELAY,
+                ),
             ),
             f"View Assist navigation ({category})",
         )
@@ -263,11 +293,15 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
         configured_entity: str,
         path: str,
         revert_timeout: int,
+        navigation_delay: float,
     ) -> None:
         """Navigate the View Assist satellite that originated the request."""
         try:
+            delay = max(0.0, min(float(navigation_delay), 10.0))
+            if delay:
+                await asyncio.sleep(delay)
             if not self.hass.services.has_service("view_assist", "navigate"):
-                _LOGGER.debug(
+                _LOGGER.warning(
                     "View Assist navigation skipped: service view_assist.navigate "
                     "is not available"
                 )
@@ -315,7 +349,7 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
                     if key in supported
                 }
             )
-            _LOGGER.debug(
+            _LOGGER.info(
                 "Navigated View Assist entity %s to %s (configured as %s)",
                 entity_id,
                 resolved_path,
@@ -335,7 +369,13 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
     ) -> str | None:
         """Resolve the View Assist sensor associated with the voice device."""
         if configured_entity and configured_entity != VIEW_ASSIST_AUTO_ENTITY:
-            return configured_entity
+            if self.hass.states.get(configured_entity) is not None:
+                return configured_entity
+            _LOGGER.warning(
+                "Configured View Assist entity %s is unavailable",
+                configured_entity,
+            )
+            return None
 
         registry = er.async_get(self.hass)
         raw_device_id = getattr(user_input, "device_id", None)
@@ -355,6 +395,31 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
                 candidate_entity_ids.add(str(candidate))
             else:
                 candidate_device_ids.add(str(candidate))
+
+        # Prefer View Assist's own resolver when its integration is installed.
+        # This keeps Assist Router aligned with changes in View Assist internals.
+        try:
+            helpers = import_module("custom_components.view_assist.helpers")
+            resolver = getattr(
+                helpers,
+                "get_entity_id_from_conversation_device_id",
+                None,
+            )
+            if callable(resolver):
+                for device_id in candidate_device_ids:
+                    resolved = resolver(self.hass, device_id)
+                    if resolved and self.hass.states.get(resolved) is not None:
+                        _LOGGER.debug(
+                            "View Assist official resolver matched %s to %s",
+                            device_id,
+                            resolved,
+                        )
+                        return resolved
+        except (ImportError, AttributeError, KeyError, TypeError):
+            _LOGGER.debug(
+                "View Assist official resolver unavailable; using local fallback",
+                exc_info=True,
+            )
 
         view_assist_sensors: list[str] = []
         for entry in self.hass.config_entries.async_entries("view_assist"):
@@ -401,6 +466,16 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
         if len(unique_sensors) == 1:
             return unique_sensors[0]
 
+        _LOGGER.warning(
+            "Could not select a View Assist satellite automatically. "
+            "conversation device_id=%s satellite_id=%s candidate devices=%s "
+            "candidate entities=%s available View Assist sensors=%s",
+            raw_device_id,
+            satellite_id,
+            sorted(candidate_device_ids),
+            sorted(candidate_entity_ids),
+            unique_sensors,
+        )
         return None
 
     async def _async_process_openclaw_background(

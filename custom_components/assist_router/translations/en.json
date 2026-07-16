@@ -38,12 +38,14 @@
         "data": {
           "view_assist_enabled": "Enable View Assist navigation",
           "view_assist_entity": "View Assist satellite",
-          "view_revert_timeout": "Seconds before reverting"
+          "view_revert_timeout": "Seconds before reverting",
+          "view_navigation_delay": "Delay before opening the view"
         },
         "data_description": {
           "view_assist_enabled": "Open a view related to the final answer.",
           "view_assist_entity": "Automatic uses the satellite that originated the conversation.",
-          "view_revert_timeout": "Use 0 to stay on the selected view."
+          "view_revert_timeout": "Use 0 to stay on the selected view.",
+          "view_navigation_delay": "Wait briefly so View Assist does not overwrite navigation while the pipeline is finishing. 0.8 seconds is recommended."
         }
       }
     },
@@ -56,7 +58,8 @@
       "background_instruction_required": "Enter the delivery instruction for OpenClaw.",
       "invalid_view_path": "Use a simple name such as weather or a full path starting with /. Do not use spaces.",
       "view_keywords_required": "Enter at least one keyword for this view or disable it.",
-      "not_enough_agents": "At least two conversation agents must be loaded."
+      "not_enough_agents": "At least two conversation agents must be loaded.",
+      "end_phrases_required": "Enter at least one phrase that closes the conversation."
     },
     "abort": {
       "already_configured": "Assist Router is already configured."
@@ -69,6 +72,7 @@
         "description": "Choose the section to edit. Each view has its own page.",
         "menu_options": {
           "routing": "Agents and main filter",
+          "conversation": "Conversation ending",
           "openclaw": "OpenClaw",
           "view_assist": "View Assist: general settings",
           "view_weather": "Weather and forecast",
@@ -113,16 +117,18 @@
       },
       "view_assist": {
         "title": "View Assist: general settings",
-        "description": "Automatic satellite detection uses pipeline and View Assist device metadata.",
+        "description": "Choose the satellite, revert timeout, and a brief delay so navigation runs after View Assist processing.",
         "data": {
           "view_assist_enabled": "Enable View Assist navigation",
           "view_assist_entity": "View Assist satellite",
-          "view_revert_timeout": "Seconds before reverting"
+          "view_revert_timeout": "Seconds before reverting",
+          "view_navigation_delay": "Delay before opening the view"
         },
         "data_description": {
           "view_assist_enabled": "Disable to keep spoken responses only.",
           "view_assist_entity": "Automatic uses the originating satellite.",
-          "view_revert_timeout": "Value passed to view_assist.navigate."
+          "view_revert_timeout": "Value passed to view_assist.navigate.",
+          "view_navigation_delay": "Seconds to wait before calling view_assist.navigate. Start with 0.8."
         }
       },
       "view_weather": {
@@ -235,6 +241,20 @@
           "view_domotics_enabled": "Disable if this view is not installed.",
           "view_domotics_path": "Use a relative view name or a full path starting with /.",
           "view_domotics_keywords": "One word per line. The response is checked first and the original request is used as fallback."
+        }
+      },
+      "conversation": {
+        "title": "Conversation ending",
+        "description": "These phrases end a follow-up conversation without being sent to Gemini or OpenClaw.",
+        "data": {
+          "end_phrases": "Closing phrases",
+          "end_response": "Closing response",
+          "end_view_home": "Return to the home view"
+        },
+        "data_description": {
+          "end_phrases": "One phrase per line. The whole utterance is matched while ignoring case, accents, and punctuation.",
+          "end_response": "May be left blank to end without spoken feedback.",
+          "end_view_home": "Open the home screen on the same View Assist satellite when closing."
         }
       }
     },

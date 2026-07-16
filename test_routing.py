@@ -25,3 +25,10 @@ assert module.migrate_default_keywords(
 assert module.migrate_default_keywords(
     "luz\npersonalizada", legacy_default, current_default
 ) == "luz\npersonalizada"
+
+closing = "chau\ngracias\nok\nbueno\nhasta luego"
+assert module.matches_end_phrase("¡Chau!", closing)
+assert module.matches_end_phrase("Hasta luego", closing)
+assert not module.matches_end_phrase("Bueno, prendé la luz", closing)
+assert not module.matches_end_phrase("Gracias por apagar la luz", closing)
+assert module.canonicalize_phrases("Chau; Hasta luego") == "chau\nhasta luego"

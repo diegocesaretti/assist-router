@@ -119,7 +119,11 @@ class ConfigEntry:
                 "clima|/view-assist/weather|clima, lluvia"
             ),
             "view_revert_timeout": 20,
+            "view_navigation_delay": 0,
             "openclaw_view_path": "/view-assist/info",
+            "end_phrases": "chau\ngracias\nok\nbueno\nhasta luego",
+            "end_response": "Hasta luego.",
+            "end_view_home": True,
         }
         self.options = {}
 
@@ -330,6 +334,24 @@ async def main():
         "/view-assist/intent"
     )
     assert hass.services.calls[-1]["service_data"]["revert_timeout"] == 20
+
+
+    previous_call_count = len(CALLS)
+    previous_task_count = len(hass.tasks)
+    closing_result = await router.async_process(
+        ConversationInput(
+            text="¡Gracias!",
+            conversation_id="conversation-follow-up",
+            device_id="device-kitchen",
+        )
+    )
+    assert router._extract_response_text(closing_result) == "Hasta luego."
+    assert closing_result.conversation_id is None
+    assert closing_result.continue_conversation is False
+    assert len(CALLS) == previous_call_count
+    closing_tasks = hass.tasks[previous_task_count:]
+    await asyncio.gather(*closing_tasks)
+    assert hass.services.calls[-1]["service_data"]["path"] == "home"
 
     print("Background routing and View Assist smoke tests: OK")
 

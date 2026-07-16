@@ -23,6 +23,9 @@ except ImportError:  # Compatibility with older Home Assistant releases.
 
 from .const import (
     CONF_DOMOTICS_AGENT,
+    CONF_END_PHRASES,
+    CONF_END_RESPONSE,
+    CONF_END_VIEW_HOME,
     CONF_KEYWORDS,
     CONF_OPENCLAW_ACK_MESSAGE,
     CONF_OPENCLAW_AGENT,
@@ -32,21 +35,32 @@ from .const import (
     CONF_OPENCLAW_VIEW_PATH_V2,
     CONF_VIEW_ASSIST_ENABLED,
     CONF_VIEW_ASSIST_ENTITY,
+    CONF_VIEW_NAVIGATION_DELAY,
     CONF_VIEW_REVERT_TIMEOUT,
     CONF_VIEW_RULES,
+    DEFAULT_END_PHRASES,
+    DEFAULT_END_RESPONSE,
+    DEFAULT_END_VIEW_HOME,
     DEFAULT_KEYWORDS,
-    LEGACY_DEFAULT_KEYWORDS_0_1_3,
     DEFAULT_OPENCLAW_ACK_MESSAGE,
     DEFAULT_OPENCLAW_BACKGROUND_INSTRUCTION,
     DEFAULT_OPENCLAW_VIEW_ENABLED,
     DEFAULT_OPENCLAW_VIEW_PATH,
     DEFAULT_VIEW_ASSIST_ENABLED,
     DEFAULT_VIEW_ASSIST_ENTITY,
+    DEFAULT_VIEW_NAVIGATION_DELAY,
     DEFAULT_VIEW_REVERT_TIMEOUT,
     DOMAIN,
+    LEGACY_DEFAULT_KEYWORDS_0_1_3,
     VIEW_ASSIST_AUTO_ENTITY,
 )
-from .routing import canonicalize_keywords, migrate_default_keywords, parse_keywords
+from .routing import (
+    canonicalize_keywords,
+    canonicalize_phrases,
+    migrate_default_keywords,
+    parse_keywords,
+    parse_phrases,
+)
 from .view_routing import (
     VIEW_DEFINITIONS,
     VIEW_DEFINITIONS_BY_SLUG,
@@ -150,11 +164,15 @@ def _base_defaults() -> dict[str, Any]:
     """Return defaults for a new installation."""
     return {
         CONF_KEYWORDS: DEFAULT_KEYWORDS,
+        CONF_END_PHRASES: DEFAULT_END_PHRASES,
+        CONF_END_RESPONSE: DEFAULT_END_RESPONSE,
+        CONF_END_VIEW_HOME: DEFAULT_END_VIEW_HOME,
         CONF_OPENCLAW_ACK_MESSAGE: DEFAULT_OPENCLAW_ACK_MESSAGE,
         CONF_OPENCLAW_BACKGROUND_INSTRUCTION: DEFAULT_OPENCLAW_BACKGROUND_INSTRUCTION,
         CONF_VIEW_ASSIST_ENABLED: DEFAULT_VIEW_ASSIST_ENABLED,
         CONF_VIEW_ASSIST_ENTITY: DEFAULT_VIEW_ASSIST_ENTITY,
         CONF_VIEW_REVERT_TIMEOUT: DEFAULT_VIEW_REVERT_TIMEOUT,
+        CONF_VIEW_NAVIGATION_DELAY: DEFAULT_VIEW_NAVIGATION_DELAY,
         CONF_OPENCLAW_VIEW_ENABLED: DEFAULT_OPENCLAW_VIEW_ENABLED,
         CONF_OPENCLAW_VIEW_PATH_V2: DEFAULT_OPENCLAW_VIEW_PATH,
         **view_defaults(),
@@ -183,6 +201,44 @@ def _routing_schema(
             ): TextSelector(TextSelectorConfig(multiline=True)),
         }
     )
+
+
+def _conversation_schema(defaults: dict[str, Any]) -> vol.Schema:
+    """Build conversation ending behavior form."""
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_END_PHRASES,
+                default=defaults.get(CONF_END_PHRASES, DEFAULT_END_PHRASES),
+            ): TextSelector(TextSelectorConfig(multiline=True)),
+            vol.Required(
+                CONF_END_RESPONSE,
+                default=defaults.get(CONF_END_RESPONSE, DEFAULT_END_RESPONSE),
+            ): TextSelector(TextSelectorConfig(multiline=False)),
+            vol.Required(
+                CONF_END_VIEW_HOME,
+                default=defaults.get(CONF_END_VIEW_HOME, DEFAULT_END_VIEW_HOME),
+            ): bool,
+        }
+    )
+
+
+def _validate_conversation(user_input: dict[str, Any]) -> dict[str, str]:
+    """Validate closing phrases."""
+    errors: dict[str, str] = {}
+    if not parse_phrases(user_input[CONF_END_PHRASES]):
+        errors[CONF_END_PHRASES] = "end_phrases_required"
+    return errors
+
+
+def _normalize_conversation(user_input: dict[str, Any]) -> dict[str, Any]:
+    """Normalize closing phrases and response."""
+    normalized = dict(user_input)
+    normalized[CONF_END_PHRASES] = canonicalize_phrases(
+        normalized[CONF_END_PHRASES]
+    )
+    normalized[CONF_END_RESPONSE] = normalized[CONF_END_RESPONSE].strip()
+    return normalized
 
 
 def _openclaw_schema(defaults: dict[str, Any]) -> vol.Schema:
@@ -242,6 +298,12 @@ def _view_assist_schema(
                     CONF_VIEW_REVERT_TIMEOUT, DEFAULT_VIEW_REVERT_TIMEOUT
                 ),
             ): vol.All(vol.Coerce(int), vol.Range(min=0, max=120)),
+            vol.Required(
+                CONF_VIEW_NAVIGATION_DELAY,
+                default=defaults.get(
+                    CONF_VIEW_NAVIGATION_DELAY, DEFAULT_VIEW_NAVIGATION_DELAY
+                ),
+            ): vol.All(vol.Coerce(float), vol.Range(min=0, max=10)),
         }
     )
 
@@ -450,6 +512,7 @@ class AssistRouterOptionsFlow(OptionsFlow):
             step_id="init",
             menu_options=[
                 "routing",
+                "conversation",
                 "openclaw",
                 "view_assist",
                 *[f"view_{definition.slug}" for definition in VIEW_DEFINITIONS],
@@ -471,6 +534,23 @@ class AssistRouterOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="routing",
             data_schema=_routing_schema(user_input or _effective_settings(self._entry), agents),
+            errors=errors,
+        )
+
+    async def async_step_conversation(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Configure phrases that explicitly close a follow-up conversation."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            errors = _validate_conversation(user_input)
+            if not errors:
+                return self._save(_normalize_conversation(user_input))
+        return self.async_show_form(
+            step_id="conversation",
+            data_schema=_conversation_schema(
+                user_input or _effective_settings(self._entry)
+            ),
             errors=errors,
         )
 

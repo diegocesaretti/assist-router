@@ -30,6 +30,36 @@ def parse_keywords(value: str) -> list[str]:
     return list(dict.fromkeys(words))
 
 
+
+def normalize_phrase(value: str) -> str:
+    """Normalize a phrase while preserving word order."""
+    return " ".join(_WORD_RE.findall(normalize_text(value)))
+
+
+def parse_phrases(value: str) -> list[str]:
+    """Parse one configurable closing phrase per line.
+
+    Commas and semicolons are also accepted as separators. Phrases keep their
+    internal spaces so entries such as ``hasta luego`` can be matched exactly.
+    """
+    phrases: list[str] = []
+    for raw_item in re.split(r"[\n,;]+", value):
+        phrase = normalize_phrase(raw_item)
+        if phrase and phrase not in phrases:
+            phrases.append(phrase)
+    return phrases
+
+
+def canonicalize_phrases(value: str) -> str:
+    """Return one normalized phrase per line."""
+    return "\n".join(parse_phrases(value))
+
+
+def matches_end_phrase(text: str, phrase_text: str) -> bool:
+    """Return True only when the complete utterance is a closing phrase."""
+    spoken = normalize_phrase(text)
+    return bool(spoken and spoken in set(parse_phrases(phrase_text)))
+
 def canonicalize_keywords(value: str) -> str:
     """Return one normalized keyword per line."""
     return "\n".join(parse_keywords(value))

@@ -43,6 +43,9 @@ for definition in view_routing.VIEW_DEFINITIONS:
     assert definition.keywords_key in data
     assert f'async_step_view_{definition.slug}' in source or "_make_view_step" in source
 
+assert "conversation" in menu
+assert "conversation" in strings["options"]["step"]
+assert "end_phrases" in strings["options"]["step"]["conversation"]["data"]
 assert "view_rules" not in menu
 assert "categoria | /ruta | palabras" not in json.dumps(strings, ensure_ascii=False)
 

@@ -38,12 +38,14 @@
         "data": {
           "view_assist_enabled": "Activar navegación de View Assist",
           "view_assist_entity": "Satélite View Assist",
-          "view_revert_timeout": "Segundos antes de volver"
+          "view_revert_timeout": "Segundos antes de volver",
+          "view_navigation_delay": "Demora antes de abrir la vista"
         },
         "data_description": {
           "view_assist_enabled": "Permite que el router abra una vista relacionada con la respuesta.",
           "view_assist_entity": "Automático intenta usar el mismo satélite que originó la conversación.",
-          "view_revert_timeout": "Usá 0 para no solicitar retorno automático."
+          "view_revert_timeout": "Usá 0 para no solicitar retorno automático.",
+          "view_navigation_delay": "Espera unos segundos para evitar que View Assist pise la navegación mientras termina el pipeline. El valor recomendado es 0,8."
         }
       }
     },
@@ -56,7 +58,8 @@
       "background_instruction_required": "Ingresá la instrucción que OpenClaw debe seguir para entregar el resultado.",
       "invalid_view_path": "Usá un nombre simple como weather o una ruta completa que empiece con /. No uses espacios.",
       "view_keywords_required": "Ingresá al menos una palabra para esta vista o desactivala.",
-      "not_enough_agents": "No hay al menos dos agentes de conversación cargados. Configurá Gemini y OpenClaw, reiniciá Home Assistant y volvé a intentar."
+      "not_enough_agents": "No hay al menos dos agentes de conversación cargados. Configurá Gemini y OpenClaw, reiniciá Home Assistant y volvé a intentar.",
+      "end_phrases_required": "Ingresá al menos una frase para cerrar la conversación."
     },
     "abort": {
       "already_configured": "Assist Router ya está configurado."
@@ -69,6 +72,7 @@
         "description": "Elegí qué parte querés modificar. Cada vista tiene su propia pantalla con activación, ruta y palabras.",
         "menu_options": {
           "routing": "Agentes y filtro principal",
+          "conversation": "Cierre de conversación",
           "openclaw": "OpenClaw",
           "view_assist": "View Assist: ajustes generales",
           "view_weather": "Clima y tiempo",
@@ -113,16 +117,18 @@
       },
       "view_assist": {
         "title": "View Assist: ajustes generales",
-        "description": "La detección automática fue reforzada para usar el dispositivo, el satélite o los atributos del sensor View Assist.",
+        "description": "Elegí el satélite, el retorno y una pequeña demora para que la navegación ocurra después del procesamiento de View Assist.",
         "data": {
           "view_assist_enabled": "Activar navegación de View Assist",
           "view_assist_entity": "Satélite View Assist",
-          "view_revert_timeout": "Segundos antes de volver"
+          "view_revert_timeout": "Segundos antes de volver",
+          "view_navigation_delay": "Demora antes de abrir la vista"
         },
         "data_description": {
           "view_assist_enabled": "Desactivá esta opción para conservar solamente las respuestas habladas.",
           "view_assist_entity": "Automático usa el satélite que escuchó. Elegí uno fijo si tu micrófono no informa su identidad.",
-          "view_revert_timeout": "Valor enviado a view_assist.navigate. Usá 0 para permanecer en la vista."
+          "view_revert_timeout": "Valor enviado a view_assist.navigate. Usá 0 para permanecer en la vista.",
+          "view_navigation_delay": "Segundos de espera antes de llamar a view_assist.navigate. Usá 0,8 como punto de partida."
         }
       },
       "view_weather": {
@@ -235,6 +241,20 @@
           "view_domotics_enabled": "Desactivala si esa vista no está instalada en tu dashboard.",
           "view_domotics_path": "Podés escribir solo el nombre, por ejemplo 'weather'. El router agregará automáticamente la ruta real del dashboard. También se acepta una ruta completa que empiece con /.",
           "view_domotics_keywords": "Una palabra por línea. Se comparan primero con la respuesta final y, si no hay coincidencias, con la frase original del STT."
+        }
+      },
+      "conversation": {
+        "title": "Cierre de conversación",
+        "description": "Estas frases terminan una conversación de seguimiento sin enviarse a Gemini ni a OpenClaw.",
+        "data": {
+          "end_phrases": "Frases de cierre",
+          "end_response": "Respuesta al cerrar",
+          "end_view_home": "Volver a la vista inicial"
+        },
+        "data_description": {
+          "end_phrases": "Una frase por línea. Se compara la frase completa, ignorando mayúsculas, tildes y signos. Por ejemplo: chau, gracias, ok, bueno, hasta luego.",
+          "end_response": "Puede quedar vacía para cerrar sin respuesta hablada.",
+          "end_view_home": "Al cerrar, abre la pantalla inicial del mismo satélite View Assist."
         }
       }
     },
