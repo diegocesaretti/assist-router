@@ -32,3 +32,9 @@ assert module.matches_end_phrase("Hasta luego", closing)
 assert not module.matches_end_phrase("Bueno, prendé la luz", closing)
 assert not module.matches_end_phrase("Gracias por apagar la luz", closing)
 assert module.canonicalize_phrases("Chau; Hasta luego") == "chau\nhasta luego"
+
+forced = "openclaw\npor whatsapp\nmis archivos\nen mi pc"
+assert module.matches_phrase_in_text("Usá OpenClaw para revisar esto", forced)
+assert module.matches_phrase_in_text("Mandámelo por WhatsApp cuando termines", forced)
+assert module.matches_phrase_in_text("Buscá esto en mi PC", forced)
+assert not module.matches_phrase_in_text("¿Qué es una computadora personal?", forced)

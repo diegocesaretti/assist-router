@@ -1,6 +1,6 @@
-# Assist Router 0.2.3 para Home Assistant
+# Assist Router 0.3.0 para Home Assistant
 
-Agente frontal para Assist que deriva el texto del STT a un agente doméstico o a OpenClaw. También integra una secuencia visual con View Assist y permite cerrar explícitamente una conversación de seguimiento.
+Agente frontal para Assist con tres destinos: domótica, consultas generales rápidas y OpenClaw en segundo plano. Mantiene la integración con View Assist, el cierre de conversación y la entrega de tareas largas por WhatsApp.
 
 ## Flujo
 
@@ -8,53 +8,20 @@ Agente frontal para Assist que deriva el texto del STT a un agente doméstico o 
 STT
  └─ Assist Router
      ├─ frase de cierre exacta
-     │   ├─ termina la conversación
-     │   └─ opcionalmente vuelve a la vista inicial
+     │   └─ termina la conversación
+     ├─ frase que fuerza OpenClaw
+     │   └─ confirmación inmediata + trabajo en segundo plano
      ├─ contiene una palabra de domótica
-     │   └─ Gemini / agente doméstico
-     │       ├─ devuelve la respuesta para TTS
-     │       ├─ muestra la respuesta escrita
-     │       └─ abre la vista relacionada
-     └─ no contiene palabras de domótica
-         └─ responde inmediatamente y ejecuta OpenClaw en segundo plano
+     │   └─ agente de domótica
+     └─ resto
+         └─ agente general rápido
+             ├─ responde normalmente
+             └─ o devuelve una marca interna y autoriza OpenClaw
 ```
 
-## Novedades de la versión 0.2.3
+OpenClaw nunca es el destino por descarte. Solo se ejecuta cuando una frase configurada lo fuerza o cuando el agente general determina que el pedido necesita herramientas externas, datos personales o trabajo prolongado.
 
-- La respuesta del agente se muestra escrita en la vista `info` antes de abrir la vista temática.
-- Tiempo configurable para la respuesta escrita; valor predeterminado: **3 segundos**.
-- Tiempo configurable para la vista relacionada; valor predeterminado: **4 segundos**.
-- Ruta configurable para la vista que muestra la respuesta escrita.
-- La secuencia limpia el mensaje antes de cambiar a clima, cámaras, domótica u otra vista.
-- Si no existe una vista relacionada, vuelve a inicio después de mostrar la respuesta.
-- La respuesta de OpenClaw también puede mostrarse escrita antes de abrir su vista de procesamiento.
-
-## Secuencia visual
-
-```text
-Respuesta del agente
-        ↓
-Demora inicial de navegación (0,8 s)
-        ↓
-Vista info + respuesta escrita (3 s)
-        ↓
-Vista relacionada, por ejemplo weather o intent (4 s)
-        ↓
-Retorno de View Assist
-```
-
-Para mostrar el texto, el router primero navega a la vista configurada y después llama a `view_assist.set_state` con:
-
-```yaml
-entity_id: sensor.view_assist_del_satelite
-title: Respuesta
-message: La luz del living quedó encendida
-message_font_size: 6vw
-```
-
-Luego llama a `view_assist.navigate` para abrir la vista relacionada.
-
-## Configuración
+## Tres agentes configurables
 
 Desde:
 
@@ -62,26 +29,77 @@ Desde:
 Ajustes → Dispositivos y servicios → Assist Router → Configurar
 ```
 
-En **View Assist: ajustes generales** se pueden cambiar:
+En **Tres agentes y filtro de domótica** se eligen:
 
-- Satélite View Assist.
-- Mostrar o no la respuesta escrita.
-- Vista para mostrar la respuesta; predeterminado: `info`.
-- Segundos de respuesta escrita; predeterminado: `3`.
-- Segundos de la vista relacionada; predeterminado: `4`.
-- Demora inicial de navegación; predeterminado: `0.8`.
+- Agente de domótica.
+- Agente general y clasificador.
+- Agente OpenClaw.
+- Lista de palabras de domótica.
 
-Las rutas pueden ser relativas:
+Para actualizar desde 0.2.3, entrá una vez en esa pantalla y seleccioná el nuevo agente general. Mientras no lo hagas, la integración usa el agente de domótica como respaldo para no dejar de funcionar.
+
+## Clasificador del agente general
+
+El agente general recibe un protocolo interno fijo:
+
+- Si puede contestar directamente, devuelve una respuesta normal.
+- Si necesita OpenClaw, devuelve una marca privada que el usuario nunca escucha.
+- Ante dudas, debe responder como consulta general.
+
+La pantalla **Clasificador del agente general** permite editar:
+
+- Criterios para derivar a OpenClaw.
+- Frases que fuerzan OpenClaw directamente.
+
+Criterios predeterminados: correo, calendario, archivos, PC, WhatsApp, cuentas externas, creación o envío de archivos, acciones fuera de Home Assistant e investigaciones o tareas prolongadas.
+
+Consultas que quedan en el agente general:
 
 ```text
-info
-weather
-camera
-music
-intent
+¿Cómo hago una salsa blanca?
+¿Quién fue San Martín?
+Contame un cuento para Cruz.
+Explicame la fotosíntesis.
 ```
 
-El router las combina con la ruta base real del dashboard del satélite. También acepta rutas absolutas como `/view-assist/info`.
+Consultas que pueden derivarse a OpenClaw:
+
+```text
+Revisame los correos.
+Buscá el manual que tengo en la PC.
+Prepará un archivo y mandámelo por WhatsApp.
+Compará estas opciones y avisame cuando termines.
+```
+
+## OpenClaw
+
+Cuando se autoriza una tarea de OpenClaw:
+
+1. Home Assistant responde inmediatamente con la frase configurada.
+2. Cierra la conversación de voz para evitar eco y bucles.
+3. Muestra la confirmación escrita en View Assist.
+4. Envía el pedido a OpenClaw en segundo plano.
+5. OpenClaw entrega el resultado por WhatsApp.
+
+La protección anti-eco de la versión 0.2.3 se conserva.
+
+## View Assist
+
+La secuencia visual sigue siendo configurable:
+
+```text
+Respuesta del agente
+        ↓
+Demora inicial, predeterminado 0,8 s
+        ↓
+Vista info + respuesta escrita, predeterminado 3 s
+        ↓
+Vista relacionada, predeterminado 4 s
+        ↓
+Retorno de View Assist
+```
+
+Las rutas pueden ser relativas, por ejemplo `info`, `weather`, `camera`, `music` o `intent`, o absolutas como `/view-assist/info`.
 
 ## Frases de cierre
 
@@ -95,24 +113,7 @@ bueno
 hasta luego
 ```
 
-La coincidencia ignora mayúsculas, tildes y signos, pero exige que toda la frase coincida.
-
-```text
-“¡Gracias!”          → cierra
-“Hasta luego”        → cierra
-“Gracias por apagar” → no cierra
-“Bueno, prendé luz”  → no cierra
-```
-
-## OpenClaw
-
-Cuando no hay palabras de domótica:
-
-1. Home Assistant reproduce inmediatamente la confirmación configurada.
-2. Esa confirmación puede mostrarse escrita durante el tiempo configurado.
-3. OpenClaw recibe la solicitud en segundo plano.
-4. Se abre la vista de procesamiento configurada.
-5. OpenClaw entrega el resultado por WhatsApp según la instrucción configurada.
+La coincidencia exige que toda la frase sea de cierre. Por eso “gracias” termina, pero “gracias por apagar la luz” continúa normalmente.
 
 ## Instalación o actualización
 
@@ -124,35 +125,12 @@ Cuando no hay palabras de domótica:
 ```
 
 3. Reiniciar Home Assistant.
-4. Abrir **Assist Router → Configurar → View Assist: ajustes generales**.
-5. Confirmar inicialmente estos valores:
+4. Abrir **Assist Router → Configurar → Tres agentes y filtro de domótica**.
+5. Seleccionar el agente general rápido.
+6. Revisar **Clasificador del agente general**.
 
-```text
-Mostrar la respuesta escrita: activado
-Vista para mostrar la respuesta: info
-Segundos de respuesta escrita: 3
-Segundos de la vista relacionada: 4
-Demora inicial: 0.8
-```
-
-No hace falta borrar ni volver a crear la entrada de integración.
+No hace falta borrar ni volver a crear la integración.
 
 ## Diagnóstico
 
-En **Ajustes → Sistema → Registros**, buscar `assist_router`. La versión registra:
-
-```text
-Showing written response on ...
-Showing related View Assist view on ...
-View Assist response sequence skipped ...
-View Assist response sequence failed
-```
-
-Un fallo visual no interrumpe la respuesta hablada ni el envío a OpenClaw.
-
-
-## 0.2.3
-
-- Corrige el bucle de confirmación al derivar a OpenClaw.
-- La confirmación inmediata ahora cierra explícitamente la conversación (`conversation_id=None` y `continue_conversation=False`).
-- Agrega un filtro anti-eco: si STT vuelve a oír exactamente la confirmación configurada, la descarta en silencio y no llama a ningún agente.
+En **Ajustes → Sistema → Registros**, buscar `assist_router`. Los registros indican la ruta seleccionada, el agente general usado, las derivaciones autorizadas a OpenClaw y la secuencia de View Assist.

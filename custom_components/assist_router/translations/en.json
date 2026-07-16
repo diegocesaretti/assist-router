@@ -3,17 +3,19 @@
   "config": {
     "step": {
       "user": {
-        "title": "Agents and main filter",
-        "description": "Choose both agents and the home automation routing words.",
+        "title": "Three agents and domotics filter",
+        "description": "Choose the domotics agent, the fast general agent, and OpenClaw. Keywords keep home-control requests on the fastest deterministic route.",
         "data": {
-          "domotics_agent": "Home automation agent",
+          "domotics_agent": "Domotics agent",
+          "general_agent": "General agent and classifier",
           "openclaw_agent": "OpenClaw agent",
-          "keywords": "Home automation keywords"
+          "keywords": "Domotics keywords"
         },
         "data_description": {
-          "domotics_agent": "Handles requests matching the filter.",
-          "openclaw_agent": "Handles all other requests.",
-          "keywords": "One complete word per line; matching ignores case and accents."
+          "domotics_agent": "Immediately processes utterances containing a configured keyword.",
+          "general_agent": "Answers general questions and decides whether a request truly needs OpenClaw.",
+          "openclaw_agent": "Runs in the background and delivers results through WhatsApp when classification requests it.",
+          "keywords": "One word per line. Matching uses complete words and ignores case and accents."
         }
       },
       "openclaw": {
@@ -53,10 +55,22 @@
           "view_related_display_time": "How long the weather, camera, domotics, or other related view remains visible. Use 0 to disable automatic return.",
           "view_navigation_delay": "Initial delay so View Assist can finish the pipeline state transition. Recommended: 0.8 seconds."
         }
+      },
+      "general": {
+        "title": "General-agent classifier",
+        "description": "The internal routing protocol is fixed. Configure the situations that require OpenClaw and phrases that bypass classification.",
+        "data": {
+          "general_router_instruction": "Criteria for routing to OpenClaw",
+          "force_openclaw_phrases": "Phrases that force OpenClaw"
+        },
+        "data_description": {
+          "general_router_instruction": "The general agent answers recipes, general knowledge, explanations, and simple requests. It routes only when these criteria require tools or long-running work.",
+          "force_openclaw_phrases": "One phrase per line. A phrase may appear inside a longer request and will start OpenClaw directly."
+        }
       }
     },
     "error": {
-      "agents_must_differ": "The two destinations must be different agents.",
+      "agents_must_differ": "All three destinations must use different agents.",
       "agent_not_found": "The selected agent is no longer available.",
       "recursive_agent": "Assist Router cannot select itself as a destination.",
       "keywords_required": "Enter at least one home automation keyword.",
@@ -64,8 +78,10 @@
       "background_instruction_required": "Enter the delivery instruction for OpenClaw.",
       "invalid_view_path": "Use a simple name such as weather or a full path starting with /. Do not use spaces.",
       "view_keywords_required": "Enter at least one keyword for this view or disable it.",
-      "not_enough_agents": "At least two conversation agents must be loaded.",
-      "end_phrases_required": "Enter at least one phrase that closes the conversation."
+      "not_enough_agents": "At least three conversation agents must be loaded. Configure domotics, a general agent, and OpenClaw, restart Home Assistant, and try again.",
+      "end_phrases_required": "Enter at least one phrase that closes the conversation.",
+      "general_openclaw_must_differ": "The general agent cannot be the same as the OpenClaw agent.",
+      "general_instruction_required": "Enter criteria that tell the general agent when to route to OpenClaw."
     },
     "abort": {
       "already_configured": "Assist Router is already configured."
@@ -78,6 +94,7 @@
         "description": "Choose the section to edit. Each view has its own page.",
         "menu_options": {
           "routing": "Agents and main filter",
+          "general": "General-agent classifier",
           "conversation": "Conversation ending",
           "openclaw": "OpenClaw",
           "view_assist": "View Assist: general settings",
@@ -92,17 +109,19 @@
         }
       },
       "routing": {
-        "title": "Agents and main filter",
-        "description": "These words decide whether a request goes to home automation or OpenClaw.",
+        "title": "Three agents and domotics filter",
+        "description": "Keywords keep domotics on the fast route. Everything else goes to the general agent first.",
         "data": {
-          "domotics_agent": "Home automation agent",
+          "domotics_agent": "Domotics agent",
+          "general_agent": "General agent and classifier",
           "openclaw_agent": "OpenClaw agent",
-          "keywords": "Home automation keywords"
+          "keywords": "Domotics keywords"
         },
         "data_description": {
-          "domotics_agent": "Destination for a matching STT request.",
-          "openclaw_agent": "Destination when no keyword matches.",
-          "keywords": "One word per line."
+          "domotics_agent": "Immediate destination when STT contains a configured keyword.",
+          "general_agent": "Answers normal questions and may authorize an OpenClaw task.",
+          "openclaw_agent": "Runs only for an explicit phrase or when the general agent emits the private routing marker.",
+          "keywords": "One word per line. Matching ignores accents and case."
         }
       },
       "openclaw": {
@@ -268,10 +287,22 @@
           "end_response": "May be left blank to end without spoken feedback.",
           "end_view_home": "Open the home screen on the same View Assist satellite when closing."
         }
+      },
+      "general": {
+        "title": "General-agent classifier",
+        "description": "Adjust routing criteria without changing the router’s technical protocol.",
+        "data": {
+          "general_router_instruction": "Criteria for routing to OpenClaw",
+          "force_openclaw_phrases": "Phrases that force OpenClaw"
+        },
+        "data_description": {
+          "general_router_instruction": "Describe requests that need email, files, the PC, WhatsApp, external accounts, or long-running work. When uncertain, the general agent should answer itself.",
+          "force_openclaw_phrases": "One phrase per line. Matching ignores accents and case and may occur inside a sentence."
+        }
       }
     },
     "error": {
-      "agents_must_differ": "The two destinations must be different agents.",
+      "agents_must_differ": "All three destinations must use different agents.",
       "agent_not_found": "The selected agent is no longer available.",
       "recursive_agent": "Assist Router cannot select itself as a destination.",
       "keywords_required": "Enter at least one home automation keyword.",
@@ -279,7 +310,9 @@
       "background_instruction_required": "Enter the delivery instruction for OpenClaw.",
       "invalid_view_path": "Use a simple name such as weather or a full path starting with /. Do not use spaces.",
       "view_keywords_required": "Enter at least one keyword for this view or disable it.",
-      "not_enough_agents": "At least two conversation agents must be loaded."
+      "not_enough_agents": "At least three conversation agents must be loaded. Configure domotics, a general agent, and OpenClaw, restart Home Assistant, and try again.",
+      "general_openclaw_must_differ": "The general agent cannot be the same as the OpenClaw agent.",
+      "general_instruction_required": "Enter criteria that tell the general agent when to route to OpenClaw."
     }
   }
 }

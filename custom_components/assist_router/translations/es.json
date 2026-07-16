@@ -3,16 +3,18 @@
   "config": {
     "step": {
       "user": {
-        "title": "Agentes y filtro principal",
-        "description": "Elegí los dos agentes y las palabras que hacen que una frase vaya al agente de domótica.",
+        "title": "Tres agentes y filtro de domótica",
+        "description": "Elegí el agente de domótica, el agente general rápido y OpenClaw. La lista de palabras conserva la prioridad para controlar la casa.",
         "data": {
           "domotics_agent": "Agente de domótica",
+          "general_agent": "Agente general y clasificador",
           "openclaw_agent": "Agente OpenClaw",
           "keywords": "Palabras de domótica"
         },
         "data_description": {
-          "domotics_agent": "Procesa las frases que contienen al menos una palabra del filtro.",
-          "openclaw_agent": "Procesa las demás frases.",
+          "domotics_agent": "Procesa inmediatamente las frases que contienen una palabra del filtro.",
+          "general_agent": "Responde consultas generales y decide si un pedido realmente necesita OpenClaw.",
+          "openclaw_agent": "Trabaja en segundo plano y entrega el resultado por WhatsApp cuando el clasificador lo solicita.",
           "keywords": "Una palabra por línea. La coincidencia usa palabras completas e ignora mayúsculas y tildes."
         }
       },
@@ -53,10 +55,22 @@
           "view_related_display_time": "Tiempo que permanece la vista de clima, cámaras, domótica, etc. Valor recomendado: 4 segundos. Usá 0 para que no vuelva automáticamente.",
           "view_navigation_delay": "Espera inicial para que View Assist termine de procesar el pipeline. El valor recomendado es 0,8 segundos."
         }
+      },
+      "general": {
+        "title": "Clasificador del agente general",
+        "description": "El protocolo interno no se puede cambiar. Acá definís qué situaciones deben derivarse a OpenClaw y qué frases lo fuerzan directamente.",
+        "data": {
+          "general_router_instruction": "Criterios para derivar a OpenClaw",
+          "force_openclaw_phrases": "Frases que fuerzan OpenClaw"
+        },
+        "data_description": {
+          "general_router_instruction": "El agente general responderá recetas, interés general, explicaciones y consultas simples. Solo derivará cuando estos criterios indiquen que necesita herramientas o trabajo prolongado.",
+          "force_openclaw_phrases": "Una frase por línea. Puede aparecer dentro de un pedido más largo. Estas frases saltan el clasificador y lanzan OpenClaw directamente."
+        }
       }
     },
     "error": {
-      "agents_must_differ": "Los dos destinos deben ser agentes diferentes.",
+      "agents_must_differ": "Los tres destinos deben usar agentes diferentes.",
       "agent_not_found": "El agente seleccionado ya no está disponible.",
       "recursive_agent": "Assist Router no puede seleccionarse como su propio destino.",
       "keywords_required": "Ingresá al menos una palabra de domótica.",
@@ -64,8 +78,10 @@
       "background_instruction_required": "Ingresá la instrucción que OpenClaw debe seguir para entregar el resultado.",
       "invalid_view_path": "Usá un nombre simple como weather o una ruta completa que empiece con /. No uses espacios.",
       "view_keywords_required": "Ingresá al menos una palabra para esta vista o desactivala.",
-      "not_enough_agents": "No hay al menos dos agentes de conversación cargados. Configurá Gemini y OpenClaw, reiniciá Home Assistant y volvé a intentar.",
-      "end_phrases_required": "Ingresá al menos una frase para cerrar la conversación."
+      "not_enough_agents": "No hay al menos tres agentes de conversación cargados. Configurá domótica, un agente general y OpenClaw, reiniciá Home Assistant y volvé a intentar.",
+      "end_phrases_required": "Ingresá al menos una frase para cerrar la conversación.",
+      "general_openclaw_must_differ": "El agente general no puede ser el mismo agente OpenClaw.",
+      "general_instruction_required": "Ingresá criterios para que el agente general sepa cuándo derivar a OpenClaw."
     },
     "abort": {
       "already_configured": "Assist Router ya está configurado."
@@ -78,6 +94,7 @@
         "description": "Elegí qué parte querés modificar. Cada vista tiene su propia pantalla con activación, ruta y palabras.",
         "menu_options": {
           "routing": "Agentes y filtro principal",
+          "general": "Clasificador del agente general",
           "conversation": "Cierre de conversación",
           "openclaw": "OpenClaw",
           "view_assist": "View Assist: ajustes generales",
@@ -92,16 +109,18 @@
         }
       },
       "routing": {
-        "title": "Agentes y filtro principal",
-        "description": "Estas palabras deciden si el pedido va al agente de domótica o a OpenClaw.",
+        "title": "Tres agentes y filtro de domótica",
+        "description": "La lista de palabras mantiene la ruta rápida de domótica. Todo lo demás pasa primero por el agente general.",
         "data": {
           "domotics_agent": "Agente de domótica",
+          "general_agent": "Agente general y clasificador",
           "openclaw_agent": "Agente OpenClaw",
           "keywords": "Palabras de domótica"
         },
         "data_description": {
-          "domotics_agent": "Destino cuando el STT contiene una palabra del filtro.",
-          "openclaw_agent": "Destino cuando no hay coincidencias.",
+          "domotics_agent": "Destino inmediato cuando el STT contiene una palabra del filtro.",
+          "general_agent": "Responde consultas normales y puede autorizar una tarea de OpenClaw.",
+          "openclaw_agent": "Solo se ejecuta por una frase explícita o cuando el agente general devuelve la marca interna de derivación.",
           "keywords": "Una palabra por línea. Se ignoran tildes y mayúsculas."
         }
       },
@@ -268,10 +287,22 @@
           "end_response": "Puede quedar vacía para cerrar sin respuesta hablada.",
           "end_view_home": "Al cerrar, abre la pantalla inicial del mismo satélite View Assist."
         }
+      },
+      "general": {
+        "title": "Clasificador del agente general",
+        "description": "Ajustá los criterios de derivación sin modificar el protocolo técnico del router.",
+        "data": {
+          "general_router_instruction": "Criterios para derivar a OpenClaw",
+          "force_openclaw_phrases": "Frases que fuerzan OpenClaw"
+        },
+        "data_description": {
+          "general_router_instruction": "Describí qué pedidos requieren correo, archivos, PC, WhatsApp, cuentas externas o tareas largas. Ante dudas, el agente general debe responder por sí mismo.",
+          "force_openclaw_phrases": "Una frase por línea. La coincidencia ignora tildes y mayúsculas y puede ocurrir dentro de una oración."
+        }
       }
     },
     "error": {
-      "agents_must_differ": "Los dos destinos deben ser agentes diferentes.",
+      "agents_must_differ": "Los tres destinos deben usar agentes diferentes.",
       "agent_not_found": "El agente seleccionado ya no está disponible.",
       "recursive_agent": "Assist Router no puede seleccionarse como su propio destino.",
       "keywords_required": "Ingresá al menos una palabra de domótica.",
@@ -279,7 +310,9 @@
       "background_instruction_required": "Ingresá la instrucción que OpenClaw debe seguir para entregar el resultado.",
       "invalid_view_path": "Usá un nombre simple como weather o una ruta completa que empiece con /. No uses espacios.",
       "view_keywords_required": "Ingresá al menos una palabra para esta vista o desactivala.",
-      "not_enough_agents": "No hay al menos dos agentes de conversación cargados. Configurá Gemini y OpenClaw, reiniciá Home Assistant y volvé a intentar."
+      "not_enough_agents": "No hay al menos tres agentes de conversación cargados. Configurá domótica, un agente general y OpenClaw, reiniciá Home Assistant y volvé a intentar.",
+      "general_openclaw_must_differ": "El agente general no puede ser el mismo agente OpenClaw.",
+      "general_instruction_required": "Ingresá criterios para que el agente general sepa cuándo derivar a OpenClaw."
     }
   }
 }

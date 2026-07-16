@@ -3,10 +3,13 @@
 DOMAIN = "assist_router"
 
 CONF_DOMOTICS_AGENT = "domotics_agent"
+CONF_GENERAL_AGENT = "general_agent"
 CONF_OPENCLAW_AGENT = "openclaw_agent"
 CONF_KEYWORDS = "keywords"
 CONF_OPENCLAW_ACK_MESSAGE = "openclaw_ack_message"
 CONF_OPENCLAW_BACKGROUND_INSTRUCTION = "openclaw_background_instruction"
+CONF_GENERAL_ROUTER_INSTRUCTION = "general_router_instruction"
+CONF_FORCE_OPENCLAW_PHRASES = "force_openclaw_phrases"
 
 CONF_END_PHRASES = "end_phrases"
 CONF_END_RESPONSE = "end_response"
@@ -115,7 +118,27 @@ hasta luego"""
 DEFAULT_END_RESPONSE = "Hasta luego."
 DEFAULT_END_VIEW_HOME = True
 
+OPENCLAW_ROUTE_MARKER = "[[ASSIST_ROUTER:OPENCLAW]]"
+
 DEFAULT_OPENCLAW_ACK_MESSAGE = "Dejame trabajar en eso y te aviso por WhatsApp."
+
+DEFAULT_GENERAL_ROUTER_INSTRUCTION = (
+    "Derivá a OpenClaw solamente cuando el pedido requiera acceder a datos "
+    "personales o privados, correo, calendario, archivos, la PC, WhatsApp, "
+    "cuentas externas, ejecutar acciones fuera de Home Assistant, crear o "
+    "enviar archivos, o realizar una investigación o tarea prolongada. "
+    "Respondé vos mismo las preguntas de interés general, recetas, cuentos, "
+    "explicaciones, cálculos y consultas que no necesiten herramientas externas. "
+    "Ante la duda, respondé como consulta general y no derives a OpenClaw."
+)
+
+DEFAULT_FORCE_OPENCLAW_PHRASES = """openclaw
+usa openclaw
+por whatsapp
+mandame por whatsapp
+revisa mis correos
+mis archivos
+en mi pc"""
 
 DEFAULT_OPENCLAW_BACKGROUND_INSTRUCTION = (
     "Esta solicitud fue delegada en segundo plano desde Home Assistant. "
@@ -136,4 +159,5 @@ DEFAULT_OPENCLAW_VIEW_ENABLED = True
 DEFAULT_OPENCLAW_VIEW_PATH = "info"
 
 ROUTE_DOMOTICS = "domotics"
+ROUTE_GENERAL = "general"
 ROUTE_OPENCLAW = "openclaw"

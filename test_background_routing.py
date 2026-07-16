@@ -79,11 +79,19 @@ async def async_converse(
             "text": text,
             "conversation_id": conversation_id,
             "agent_id": agent_id,
+            "extra_system_prompt": extra_system_prompt,
         }
     )
     if agent_id == "openclaw":
         await asyncio.sleep(0.05)
         speech = "La tarea de OpenClaw terminó"
+    elif agent_id == "general":
+        if "correos" in text.casefold():
+            speech = "[[ASSIST_ROUTER:OPENCLAW]]"
+        elif "salsa" in text.casefold():
+            speech = "Para una salsa blanca usá leche, harina y manteca."
+        else:
+            speech = "Esta es una respuesta general rápida."
     else:
         speech = "La luz del living quedó encendida"
     response = IntentResponse(language)
@@ -110,7 +118,12 @@ class ConfigEntry:
         self.entry_id = "router-entry"
         self.data = {
             "domotics_agent": "gemini",
+            "general_agent": "general",
             "openclaw_agent": "openclaw",
+            "general_router_instruction": (
+                "Derivar correo, archivos, PC y WhatsApp; responder recetas."
+            ),
+            "force_openclaw_phrases": "openclaw\npor whatsapp\nen mi pc",
             "keywords": "luz\naire",
             "view_assist_enabled": True,
             "view_assist_entity": "__auto__",
@@ -300,6 +313,7 @@ async def main():
     router.hass = hass
     router.entity_id = "conversation.assist_router"
 
+    # A personal/external task first goes through the fast general classifier.
     openclaw_result = await router.async_process(
         ConversationInput(
             text="Revisame los correos",
@@ -311,9 +325,11 @@ async def main():
     )
     assert openclaw_result.conversation_id is None
     assert openclaw_result.continue_conversation is False
+    assert CALLS[-1]["agent_id"] == "general"
+    assert "[[ASSIST_ROUTER:OPENCLAW]]" in str(
+        CALLS[-1]["extra_system_prompt"]
+    )
     assert len(hass.tasks) == 2  # OpenClaw plus View Assist navigation.
-    assert any(not task.done() for task in hass.tasks)
-
     await asyncio.gather(*hass.tasks)
     assert CALLS[-1]["agent_id"] == "openclaw"
     assert "enviá el resultado al usuario por WhatsApp" in CALLS[-1]["text"]
@@ -329,7 +345,7 @@ async def main():
     )
     assert set_state_calls[-1]["service_data"]["message"] == ""
 
-
+    # The acknowledgement can never re-enter the router.
     previous_call_count = len(CALLS)
     previous_task_count = len(hass.tasks)
     echo_result = await router.async_process(
@@ -345,6 +361,40 @@ async def main():
     assert len(CALLS) == previous_call_count
     assert len(hass.tasks) == previous_task_count
 
+    # A general question is answered by the fast agent without OpenClaw.
+    previous_task_count = len(hass.tasks)
+    recipe_result = await router.async_process(
+        ConversationInput(
+            text="¿Cómo hago una salsa blanca?",
+            device_id="device-kitchen",
+        )
+    )
+    assert router._extract_response_text(recipe_result).startswith(
+        "Para una salsa blanca"
+    )
+    assert recipe_result.conversation_id is not None
+    assert CALLS[-1]["agent_id"] == "general"
+    recipe_tasks = hass.tasks[previous_task_count:]
+    await asyncio.gather(*recipe_tasks)
+
+    # An explicit phrase bypasses the classifier and starts OpenClaw directly.
+    previous_call_count = len(CALLS)
+    previous_task_count = len(hass.tasks)
+    explicit_result = await router.async_process(
+        ConversationInput(
+            text="Usá OpenClaw para revisar este asunto",
+            device_id="device-kitchen",
+        )
+    )
+    assert router._extract_response_text(explicit_result).startswith(
+        "Dejame trabajar"
+    )
+    explicit_tasks = hass.tasks[previous_task_count:]
+    await asyncio.gather(*explicit_tasks)
+    explicit_calls = CALLS[previous_call_count:]
+    assert [call["agent_id"] for call in explicit_calls] == ["openclaw"]
+
+    # Domotics keeps the deterministic keyword route.
     previous_task_count = len(hass.tasks)
     domotics_result = await router.async_process(
         ConversationInput(
@@ -375,7 +425,7 @@ async def main():
         for call in domotics_set_state_calls
     )
 
-
+    # Closing phrases still terminate without contacting any destination.
     previous_call_count = len(CALLS)
     previous_task_count = len(hass.tasks)
     closing_result = await router.async_process(
@@ -393,7 +443,7 @@ async def main():
     await asyncio.gather(*closing_tasks)
     assert hass.services.calls[-1]["service_data"]["path"] == "home"
 
-    print("Background routing and View Assist smoke tests: OK")
+    print("Three-agent routing and View Assist smoke tests: OK")
 
 
 asyncio.run(main())

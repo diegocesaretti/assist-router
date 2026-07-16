@@ -43,6 +43,11 @@ for definition in view_routing.VIEW_DEFINITIONS:
     assert definition.keywords_key in data
     assert f'async_step_view_{definition.slug}' in source or "_make_view_step" in source
 
+assert "general" in menu
+assert "general" in strings["options"]["step"]
+assert "general_router_instruction" in strings["options"]["step"]["general"]["data"]
+assert "force_openclaw_phrases" in strings["options"]["step"]["general"]["data"]
+assert "general_agent" in strings["options"]["step"]["routing"]["data"]
 assert "conversation" in menu
 assert "conversation" in strings["options"]["step"]
 assert "end_phrases" in strings["options"]["step"]["conversation"]["data"]

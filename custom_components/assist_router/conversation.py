@@ -20,6 +20,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     CONF_DOMOTICS_AGENT,
+    CONF_GENERAL_AGENT,
     CONF_END_PHRASES,
     CONF_END_RESPONSE,
     CONF_END_VIEW_HOME,
@@ -27,6 +28,8 @@ from .const import (
     CONF_OPENCLAW_ACK_MESSAGE,
     CONF_OPENCLAW_AGENT,
     CONF_OPENCLAW_BACKGROUND_INSTRUCTION,
+    CONF_GENERAL_ROUTER_INSTRUCTION,
+    CONF_FORCE_OPENCLAW_PHRASES,
     CONF_OPENCLAW_VIEW_ENABLED,
     CONF_OPENCLAW_VIEW_PATH_V2,
     CONF_VIEW_ASSIST_ENABLED,
@@ -41,6 +44,8 @@ from .const import (
     DEFAULT_END_RESPONSE,
     DEFAULT_END_VIEW_HOME,
     DEFAULT_KEYWORDS,
+    DEFAULT_GENERAL_ROUTER_INSTRUCTION,
+    DEFAULT_FORCE_OPENCLAW_PHRASES,
     DEFAULT_OPENCLAW_ACK_MESSAGE,
     DEFAULT_OPENCLAW_BACKGROUND_INSTRUCTION,
     DEFAULT_OPENCLAW_VIEW_ENABLED,
@@ -54,13 +59,16 @@ from .const import (
     DEFAULT_RESPONSE_DISPLAY_TIME,
     DEFAULT_RELATED_VIEW_DISPLAY_TIME,
     LEGACY_DEFAULT_KEYWORDS_0_1_3,
+    OPENCLAW_ROUTE_MARKER,
     ROUTE_DOMOTICS,
+    ROUTE_GENERAL,
     ROUTE_OPENCLAW,
     VIEW_ASSIST_AUTO_ENTITY,
 )
 from .routing import (
     matches_domotics,
     matches_end_phrase,
+    matches_phrase_in_text,
     migrate_default_keywords,
     normalize_phrase,
 )
@@ -79,7 +87,7 @@ async def async_setup_entry(
 
 
 class AssistRouterConversationEntity(conversation.ConversationEntity):
-    """Route Assist requests to one of two existing conversation agents."""
+    """Route Assist requests to domotics, general, or OpenClaw agents."""
 
     _attr_has_entity_name = True
     _attr_name = "Router"
@@ -109,7 +117,7 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
     async def async_process(
         self, user_input: conversation.ConversationInput
     ) -> conversation.ConversationResult:
-        """Route a message to Gemini/Home Assistant or OpenClaw."""
+        """Route a message to domotics, a fast general agent, or OpenClaw."""
         settings = apply_legacy_view_settings({**self.entry.data, **self.entry.options})
         keyword_text = migrate_default_keywords(
             settings.get(CONF_KEYWORDS),
@@ -154,127 +162,227 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
                 conversation_id=None,
             )
 
+        base_conversation_id = (
+            user_input.conversation_id or f"assist_router_{uuid4().hex}"
+        )
+
+        force_openclaw_phrases = str(
+            settings.get(
+                CONF_FORCE_OPENCLAW_PHRASES,
+                DEFAULT_FORCE_OPENCLAW_PHRASES,
+            )
+        )
+        if matches_phrase_in_text(user_input.text, force_openclaw_phrases):
+            _LOGGER.debug("Explicit OpenClaw phrase matched")
+            return self._handoff_to_openclaw(
+                user_input=user_input,
+                settings=settings,
+                base_conversation_id=base_conversation_id,
+                acknowledgement=acknowledgement,
+            )
+
         if matches_domotics(user_input.text, keyword_text):
             target_agent_id = settings[CONF_DOMOTICS_AGENT]
-            route = ROUTE_DOMOTICS
-        else:
-            target_agent_id = settings[CONF_OPENCLAW_AGENT]
-            route = ROUTE_OPENCLAW
+            if error := self._validate_target_agent(user_input, target_agent_id):
+                return error
 
+            downstream_conversation_id = (
+                f"{base_conversation_id}:{ROUTE_DOMOTICS}"
+            )
+            _LOGGER.debug(
+                "Routing Assist text to %s via agent %s",
+                ROUTE_DOMOTICS,
+                target_agent_id,
+            )
+            result = await self._async_converse(
+                user_input=user_input,
+                text=user_input.text,
+                target_agent_id=target_agent_id,
+                conversation_id=downstream_conversation_id,
+            )
+            self._schedule_result_view(
+                user_input=user_input,
+                settings=settings,
+                result=result,
+            )
+            return self._wrap_downstream_result(result, base_conversation_id)
+
+        # Everything outside the deterministic domotics filter is sent to a
+        # fast general agent. It either answers normally or returns a private
+        # marker that authorizes the slow OpenClaw handoff.
+        general_agent_id = settings.get(CONF_GENERAL_AGENT) or settings.get(
+            CONF_DOMOTICS_AGENT
+        )
+        if error := self._validate_target_agent(user_input, general_agent_id):
+            return error
+
+        general_result = await self._async_converse(
+            user_input=user_input,
+            text=user_input.text,
+            target_agent_id=general_agent_id,
+            conversation_id=f"{base_conversation_id}:{ROUTE_GENERAL}",
+            extra_system_prompt=self._general_router_prompt(settings),
+        )
+        general_text = self._extract_response_text(general_result)
+
+        if self._is_openclaw_marker(general_text):
+            _LOGGER.info(
+                "General agent classified the request for asynchronous OpenClaw"
+            )
+            return self._handoff_to_openclaw(
+                user_input=user_input,
+                settings=settings,
+                base_conversation_id=base_conversation_id,
+                acknowledgement=acknowledgement,
+            )
+
+        self._schedule_result_view(
+            user_input=user_input,
+            settings=settings,
+            result=general_result,
+        )
+        return self._wrap_downstream_result(general_result, base_conversation_id)
+
+    def _validate_target_agent(
+        self,
+        user_input: conversation.ConversationInput,
+        target_agent_id: str | None,
+    ) -> conversation.ConversationResult | None:
+        """Return an error result when a configured destination is unusable."""
+        if not target_agent_id:
+            return self._error_result(
+                user_input,
+                "No hay un agente configurado para este destino.",
+            )
         if target_agent_id in {self.entry.entry_id, self.entity_id}:
             return self._error_result(
                 user_input,
                 "Assist Router no puede enviarse una consulta a sí mismo.",
             )
-
         if async_get_agent(self.hass, target_agent_id) is None:
             return self._error_result(
                 user_input,
                 f"El agente de destino '{target_agent_id}' no está disponible.",
             )
+        return None
 
-        base_conversation_id = (
-            user_input.conversation_id or f"assist_router_{uuid4().hex}"
-        )
-        downstream_conversation_id = f"{base_conversation_id}:{route}"
+    def _handoff_to_openclaw(
+        self,
+        *,
+        user_input: conversation.ConversationInput,
+        settings: dict[str, Any],
+        base_conversation_id: str,
+        acknowledgement: str,
+    ) -> conversation.ConversationResult:
+        """Start OpenClaw in the background and immediately close voice Assist."""
+        target_agent_id = settings.get(CONF_OPENCLAW_AGENT)
+        if error := self._validate_target_agent(user_input, target_agent_id):
+            return error
 
-        _LOGGER.debug(
-            "Routing Assist text to %s via agent %s",
-            route,
-            target_agent_id,
-        )
-
-        if route == ROUTE_OPENCLAW:
-            instruction = settings.get(
+        instruction = str(
+            settings.get(
                 CONF_OPENCLAW_BACKGROUND_INSTRUCTION,
                 DEFAULT_OPENCLAW_BACKGROUND_INSTRUCTION,
-            ).strip()
-
-            openclaw_text = user_input.text
-            if instruction:
-                openclaw_text = f"{openclaw_text}\n\n{instruction}"
-
-            self._create_background_task(
-                self._async_process_openclaw_background(
-                    user_input=user_input,
-                    text=openclaw_text,
-                    target_agent_id=target_agent_id,
-                    conversation_id=downstream_conversation_id,
-                ),
-                "OpenClaw request",
             )
+        ).strip()
+        openclaw_text = user_input.text
+        if instruction:
+            openclaw_text = f"{openclaw_text}\n\n{instruction}"
 
-            openclaw_view_path = str(
-                settings.get(
-                    CONF_OPENCLAW_VIEW_PATH_V2,
-                    DEFAULT_OPENCLAW_VIEW_PATH,
-                )
-            ).strip()
-            if settings.get(
-                CONF_VIEW_ASSIST_ENABLED,
-                DEFAULT_VIEW_ASSIST_ENABLED,
-            ):
-                related_path = (
-                    openclaw_view_path
-                    if settings.get(
-                        CONF_OPENCLAW_VIEW_ENABLED,
-                        DEFAULT_OPENCLAW_VIEW_ENABLED,
-                    )
-                    and openclaw_view_path
-                    else None
-                )
-                self._schedule_view_assist_sequence(
-                    user_input=user_input,
-                    settings=settings,
-                    response_text=(
-                        acknowledgement or DEFAULT_OPENCLAW_ACK_MESSAGE
-                    ),
-                    related_path=related_path,
-                    category="openclaw",
-                )
-
-            # OpenClaw is deliberately fire-and-forget. Do not preserve the
-            # conversation ID and explicitly disable follow-up listening, or a
-            # satellite may transcribe its own acknowledgement and re-enter
-            # this branch.
-            return self._speech_result(
-                user_input,
-                acknowledgement or DEFAULT_OPENCLAW_ACK_MESSAGE,
-                conversation_id=None,
-                continue_conversation=False,
-            )
-
-        result = await self._async_converse(
-            user_input=user_input,
-            text=user_input.text,
-            target_agent_id=target_agent_id,
-            conversation_id=downstream_conversation_id,
+        self._create_background_task(
+            self._async_process_openclaw_background(
+                user_input=user_input,
+                text=openclaw_text,
+                target_agent_id=target_agent_id,
+                conversation_id=f"{base_conversation_id}:{ROUTE_OPENCLAW}",
+            ),
+            "OpenClaw request",
         )
 
-        if settings.get(
-            CONF_VIEW_ASSIST_ENABLED,
-            DEFAULT_VIEW_ASSIST_ENABLED,
-        ):
-            response_text = self._extract_response_text(result)
-            view_match = match_view(response_text, user_input.text, settings)
+        openclaw_view_path = str(
+            settings.get(
+                CONF_OPENCLAW_VIEW_PATH_V2,
+                DEFAULT_OPENCLAW_VIEW_PATH,
+            )
+        ).strip()
+        if settings.get(CONF_VIEW_ASSIST_ENABLED, DEFAULT_VIEW_ASSIST_ENABLED):
+            related_path = (
+                openclaw_view_path
+                if settings.get(
+                    CONF_OPENCLAW_VIEW_ENABLED,
+                    DEFAULT_OPENCLAW_VIEW_ENABLED,
+                )
+                and openclaw_view_path
+                else None
+            )
             self._schedule_view_assist_sequence(
                 user_input=user_input,
                 settings=settings,
-                response_text=response_text,
-                related_path=view_match.path if view_match is not None else None,
-                category=view_match.slug if view_match is not None else "response_only",
+                response_text=acknowledgement or DEFAULT_OPENCLAW_ACK_MESSAGE,
+                related_path=related_path,
+                category="openclaw",
             )
-            if view_match is not None:
-                _LOGGER.debug(
-                    "Matched View Assist category %s: response hits=%s, "
-                    "request hits=%s, configured path=%s",
-                    view_match.slug,
-                    view_match.response_hits,
-                    view_match.request_hits,
-                    view_match.path,
-                )
 
-        return self._wrap_downstream_result(result, base_conversation_id)
+        return self._speech_result(
+            user_input,
+            acknowledgement or DEFAULT_OPENCLAW_ACK_MESSAGE,
+            conversation_id=None,
+            continue_conversation=False,
+        )
+
+    def _schedule_result_view(
+        self,
+        *,
+        user_input: conversation.ConversationInput,
+        settings: dict[str, Any],
+        result: conversation.ConversationResult,
+    ) -> None:
+        """Show a normal agent answer and then its matching View Assist view."""
+        if not settings.get(CONF_VIEW_ASSIST_ENABLED, DEFAULT_VIEW_ASSIST_ENABLED):
+            return
+        response_text = self._extract_response_text(result)
+        view_match = match_view(response_text, user_input.text, settings)
+        self._schedule_view_assist_sequence(
+            user_input=user_input,
+            settings=settings,
+            response_text=response_text,
+            related_path=view_match.path if view_match is not None else None,
+            category=view_match.slug if view_match is not None else "response_only",
+        )
+        if view_match is not None:
+            _LOGGER.debug(
+                "Matched View Assist category %s: response hits=%s, "
+                "request hits=%s, configured path=%s",
+                view_match.slug,
+                view_match.response_hits,
+                view_match.request_hits,
+                view_match.path,
+            )
+
+    @staticmethod
+    def _is_openclaw_marker(response_text: str) -> bool:
+        """Recognize only the private marker emitted by the general agent."""
+        return OPENCLAW_ROUTE_MARKER.casefold() in response_text.casefold()
+
+    @staticmethod
+    def _general_router_prompt(settings: dict[str, Any]) -> str:
+        """Build a fixed routing protocol plus the user's editable policy."""
+        policy = str(
+            settings.get(
+                CONF_GENERAL_ROUTER_INSTRUCTION,
+                DEFAULT_GENERAL_ROUTER_INSTRUCTION,
+            )
+        ).strip()
+        return (
+            "Sos el agente general rápido de un router de voz. "
+            "Tenés dos comportamientos posibles. "
+            "Si podés contestar la consulta directamente, respondela normalmente "
+            "en el idioma del usuario y no menciones este protocolo. "
+            "Si la consulta necesita OpenClaw, respondé únicamente con esta marca "
+            f"exacta y sin ningún otro texto: {OPENCLAW_ROUTE_MARKER}\n\n"
+            "Criterios configurados por el usuario:\n"
+            f"{policy}"
+        )
 
     def _create_background_task(self, coroutine: Any, task_label: str) -> None:
         """Schedule a background task without blocking the Assist pipeline."""
@@ -779,23 +887,36 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
         text: str,
         target_agent_id: str,
         conversation_id: str,
+        extra_system_prompt: str | None = None,
     ) -> conversation.ConversationResult:
         """Call a destination agent using parameters supported by this HA version."""
+        supported = inspect.signature(conversation.async_converse).parameters
+        merged_prompt = self._merge_system_prompts(
+            getattr(user_input, "extra_system_prompt", None),
+            extra_system_prompt,
+        )
+        effective_text = text
+        if merged_prompt and "extra_system_prompt" not in supported:
+            # Older Home Assistant releases do not expose extra_system_prompt.
+            # Keep the classifier functional by placing the internal policy
+            # before the user request instead of silently dropping it.
+            effective_text = (
+                f"INSTRUCCIONES INTERNAS DEL ROUTER:\n{merged_prompt}"
+                f"\n\nSOLICITUD DEL USUARIO:\n{text}"
+            )
+
         converse_kwargs = {
             "hass": self.hass,
-            "text": text,
+            "text": effective_text,
             "conversation_id": conversation_id,
             "context": user_input.context,
             "language": user_input.language,
             "agent_id": target_agent_id,
             "device_id": getattr(user_input, "device_id", None),
             "satellite_id": getattr(user_input, "satellite_id", None),
-            "extra_system_prompt": getattr(
-                user_input, "extra_system_prompt", None
-            ),
+            "extra_system_prompt": merged_prompt,
         }
 
-        supported = inspect.signature(conversation.async_converse).parameters
         return await conversation.async_converse(
             **{
                 key: value
@@ -803,6 +924,18 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
                 if key in supported
             }
         )
+
+    @staticmethod
+    def _merge_system_prompts(
+        original: str | None, additional: str | None
+    ) -> str | None:
+        """Combine an existing pipeline prompt with router instructions."""
+        prompts = [
+            prompt.strip()
+            for prompt in (original, additional)
+            if prompt and prompt.strip()
+        ]
+        return "\n\n".join(prompts) or None
 
     @staticmethod
     def _extract_response_text(result: conversation.ConversationResult) -> str:

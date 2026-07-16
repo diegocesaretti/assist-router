@@ -23,6 +23,7 @@ except ImportError:  # Compatibility with older Home Assistant releases.
 
 from .const import (
     CONF_DOMOTICS_AGENT,
+    CONF_GENERAL_AGENT,
     CONF_END_PHRASES,
     CONF_END_RESPONSE,
     CONF_END_VIEW_HOME,
@@ -30,6 +31,8 @@ from .const import (
     CONF_OPENCLAW_ACK_MESSAGE,
     CONF_OPENCLAW_AGENT,
     CONF_OPENCLAW_BACKGROUND_INSTRUCTION,
+    CONF_GENERAL_ROUTER_INSTRUCTION,
+    CONF_FORCE_OPENCLAW_PHRASES,
     CONF_OPENCLAW_VIEW_PATH,
     CONF_OPENCLAW_VIEW_ENABLED,
     CONF_OPENCLAW_VIEW_PATH_V2,
@@ -46,6 +49,8 @@ from .const import (
     DEFAULT_END_RESPONSE,
     DEFAULT_END_VIEW_HOME,
     DEFAULT_KEYWORDS,
+    DEFAULT_GENERAL_ROUTER_INSTRUCTION,
+    DEFAULT_FORCE_OPENCLAW_PHRASES,
     DEFAULT_OPENCLAW_ACK_MESSAGE,
     DEFAULT_OPENCLAW_BACKGROUND_INSTRUCTION,
     DEFAULT_OPENCLAW_VIEW_ENABLED,
@@ -175,6 +180,8 @@ def _base_defaults() -> dict[str, Any]:
         CONF_END_PHRASES: DEFAULT_END_PHRASES,
         CONF_END_RESPONSE: DEFAULT_END_RESPONSE,
         CONF_END_VIEW_HOME: DEFAULT_END_VIEW_HOME,
+        CONF_GENERAL_ROUTER_INSTRUCTION: DEFAULT_GENERAL_ROUTER_INSTRUCTION,
+        CONF_FORCE_OPENCLAW_PHRASES: DEFAULT_FORCE_OPENCLAW_PHRASES,
         CONF_OPENCLAW_ACK_MESSAGE: DEFAULT_OPENCLAW_ACK_MESSAGE,
         CONF_OPENCLAW_BACKGROUND_INSTRUCTION: DEFAULT_OPENCLAW_BACKGROUND_INSTRUCTION,
         CONF_VIEW_ASSIST_ENABLED: DEFAULT_VIEW_ASSIST_ENABLED,
@@ -200,6 +207,12 @@ def _routing_schema(
                 CONF_DOMOTICS_AGENT,
                 defaults.get(CONF_DOMOTICS_AGENT),
                 agent_options,
+            ): vol.In(agent_options),
+            _required_with_default(
+                CONF_GENERAL_AGENT,
+                defaults.get(CONF_GENERAL_AGENT, defaults.get(CONF_DOMOTICS_AGENT)),
+                agent_options,
+                fallback=defaults.get(CONF_DOMOTICS_AGENT),
             ): vol.In(agent_options),
             _required_with_default(
                 CONF_OPENCLAW_AGENT,
@@ -249,6 +262,48 @@ def _normalize_conversation(user_input: dict[str, Any]) -> dict[str, Any]:
         normalized[CONF_END_PHRASES]
     )
     normalized[CONF_END_RESPONSE] = normalized[CONF_END_RESPONSE].strip()
+    return normalized
+
+
+def _general_schema(defaults: dict[str, Any]) -> vol.Schema:
+    """Build the general-agent classifier policy form."""
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_GENERAL_ROUTER_INSTRUCTION,
+                default=defaults.get(
+                    CONF_GENERAL_ROUTER_INSTRUCTION,
+                    DEFAULT_GENERAL_ROUTER_INSTRUCTION,
+                ),
+            ): TextSelector(TextSelectorConfig(multiline=True)),
+            vol.Required(
+                CONF_FORCE_OPENCLAW_PHRASES,
+                default=defaults.get(
+                    CONF_FORCE_OPENCLAW_PHRASES,
+                    DEFAULT_FORCE_OPENCLAW_PHRASES,
+                ),
+            ): TextSelector(TextSelectorConfig(multiline=True)),
+        }
+    )
+
+
+def _validate_general(user_input: dict[str, Any]) -> dict[str, str]:
+    """Validate the general-agent routing policy."""
+    errors: dict[str, str] = {}
+    if not user_input[CONF_GENERAL_ROUTER_INSTRUCTION].strip():
+        errors[CONF_GENERAL_ROUTER_INSTRUCTION] = "general_instruction_required"
+    return errors
+
+
+def _normalize_general(user_input: dict[str, Any]) -> dict[str, Any]:
+    """Normalize the general-agent policy and explicit OpenClaw phrases."""
+    normalized = dict(user_input)
+    normalized[CONF_GENERAL_ROUTER_INSTRUCTION] = normalized[
+        CONF_GENERAL_ROUTER_INSTRUCTION
+    ].strip()
+    normalized[CONF_FORCE_OPENCLAW_PHRASES] = canonicalize_phrases(
+        normalized[CONF_FORCE_OPENCLAW_PHRASES]
+    )
     return normalized
 
 
@@ -390,10 +445,15 @@ def _validate_routing(
     errors: dict[str, str] = {}
     forbidden_agent_ids = forbidden_agent_ids or set()
 
-    if user_input[CONF_DOMOTICS_AGENT] == user_input[CONF_OPENCLAW_AGENT]:
+    selected_agents = {
+        user_input[CONF_DOMOTICS_AGENT],
+        user_input[CONF_GENERAL_AGENT],
+        user_input[CONF_OPENCLAW_AGENT],
+    }
+    if len(selected_agents) != 3:
         errors["base"] = "agents_must_differ"
 
-    for field in (CONF_DOMOTICS_AGENT, CONF_OPENCLAW_AGENT):
+    for field in (CONF_DOMOTICS_AGENT, CONF_GENERAL_AGENT, CONF_OPENCLAW_AGENT):
         agent_id = user_input[field]
         if agent_id in forbidden_agent_ids:
             errors[field] = "recursive_agent"
@@ -488,18 +548,35 @@ class AssistRouterConfigFlow(ConfigFlow, domain=DOMAIN):
 
         agent_options = _agent_options(self.hass)
         errors: dict[str, str] = {}
-        if len(agent_options) < 2:
+        if len(agent_options) < 3:
             errors["base"] = "not_enough_agents"
 
         if user_input is not None:
             errors = _validate_routing(self.hass, user_input)
             if not errors:
                 self._pending.update(_normalize_routing(user_input))
-                return await self.async_step_openclaw()
+                return await self.async_step_general()
 
         return self.async_show_form(
             step_id="user",
             data_schema=_routing_schema(user_input or self._pending, agent_options),
+            errors=errors,
+        )
+
+    async def async_step_general(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Configure the fast general agent and its routing policy."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            errors = _validate_general(user_input)
+            if not errors:
+                self._pending.update(_normalize_general(user_input))
+                return await self.async_step_openclaw()
+
+        return self.async_show_form(
+            step_id="general",
+            data_schema=_general_schema(user_input or self._pending),
             errors=errors,
         )
 
@@ -565,6 +642,7 @@ class AssistRouterOptionsFlow(OptionsFlow):
             step_id="init",
             menu_options=[
                 "routing",
+                "general",
                 "conversation",
                 "openclaw",
                 "view_assist",
@@ -578,7 +656,7 @@ class AssistRouterOptionsFlow(OptionsFlow):
         forbidden = _own_agent_ids(self.hass, self._entry)
         agents = _agent_options(self.hass, forbidden)
         errors: dict[str, str] = {}
-        if len(agents) < 2:
+        if len(agents) < 3:
             errors["base"] = "not_enough_agents"
         if user_input is not None:
             errors = _validate_routing(self.hass, user_input, forbidden)
@@ -587,6 +665,23 @@ class AssistRouterOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="routing",
             data_schema=_routing_schema(user_input or _effective_settings(self._entry), agents),
+            errors=errors,
+        )
+
+    async def async_step_general(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Configure the general agent classifier policy."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            errors = _validate_general(user_input)
+            if not errors:
+                return self._save(_normalize_general(user_input))
+        return self.async_show_form(
+            step_id="general",
+            data_schema=_general_schema(
+                user_input or _effective_settings(self._entry)
+            ),
             errors=errors,
         )
 

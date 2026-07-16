@@ -50,6 +50,24 @@ def parse_phrases(value: str) -> list[str]:
     return phrases
 
 
+
+
+def matches_phrase_in_text(text: str, phrase_text: str) -> bool:
+    """Return True when any configured phrase appears as complete words.
+
+    Unlike closing phrases, these entries may occur inside a longer utterance.
+    Word padding prevents a phrase such as ``pc`` from matching part of another
+    word.
+    """
+    spoken = normalize_phrase(text)
+    if not spoken:
+        return False
+    padded_spoken = f" {spoken} "
+    return any(
+        f" {phrase} " in padded_spoken
+        for phrase in parse_phrases(phrase_text)
+    )
+
 def canonicalize_phrases(value: str) -> str:
     """Return one normalized phrase per line."""
     return "\n".join(parse_phrases(value))
