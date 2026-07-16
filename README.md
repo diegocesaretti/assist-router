@@ -1,4 +1,4 @@
-# Assist Router 0.2.2 para Home Assistant
+# Assist Router 0.2.3 para Home Assistant
 
 Agente frontal para Assist que deriva el texto del STT a un agente doméstico o a OpenClaw. También integra una secuencia visual con View Assist y permite cerrar explícitamente una conversación de seguimiento.
 
@@ -19,7 +19,7 @@ STT
          └─ responde inmediatamente y ejecuta OpenClaw en segundo plano
 ```
 
-## Novedades de la versión 0.2.2
+## Novedades de la versión 0.2.3
 
 - La respuesta del agente se muestra escrita en la vista `info` antes de abrir la vista temática.
 - Tiempo configurable para la respuesta escrita; valor predeterminado: **3 segundos**.
@@ -149,3 +149,10 @@ View Assist response sequence failed
 ```
 
 Un fallo visual no interrumpe la respuesta hablada ni el envío a OpenClaw.
+
+
+## 0.2.3
+
+- Corrige el bucle de confirmación al derivar a OpenClaw.
+- La confirmación inmediata ahora cierra explícitamente la conversación (`conversation_id=None` y `continue_conversation=False`).
+- Agrega un filtro anti-eco: si STT vuelve a oír exactamente la confirmación configurada, la descarta en silencio y no llama a ningún agente.

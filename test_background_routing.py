@@ -309,6 +309,8 @@ async def main():
     assert router._extract_response_text(openclaw_result) == (
         "Dejame trabajar en eso y te aviso por WhatsApp."
     )
+    assert openclaw_result.conversation_id is None
+    assert openclaw_result.continue_conversation is False
     assert len(hass.tasks) == 2  # OpenClaw plus View Assist navigation.
     assert any(not task.done() for task in hass.tasks)
 
@@ -326,6 +328,22 @@ async def main():
         "sensor.viewassist_kitchen"
     )
     assert set_state_calls[-1]["service_data"]["message"] == ""
+
+
+    previous_call_count = len(CALLS)
+    previous_task_count = len(hass.tasks)
+    echo_result = await router.async_process(
+        ConversationInput(
+            text="¡Dejame trabajar en eso y te aviso por WhatsApp!",
+            conversation_id="self-echo",
+            device_id="device-kitchen",
+        )
+    )
+    assert router._extract_response_text(echo_result) == ""
+    assert echo_result.conversation_id is None
+    assert echo_result.continue_conversation is False
+    assert len(CALLS) == previous_call_count
+    assert len(hass.tasks) == previous_task_count
 
     previous_task_count = len(hass.tasks)
     domotics_result = await router.async_process(

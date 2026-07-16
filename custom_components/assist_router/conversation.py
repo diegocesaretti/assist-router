@@ -58,7 +58,12 @@ from .const import (
     ROUTE_OPENCLAW,
     VIEW_ASSIST_AUTO_ENTITY,
 )
-from .routing import matches_domotics, matches_end_phrase, migrate_default_keywords
+from .routing import (
+    matches_domotics,
+    matches_end_phrase,
+    migrate_default_keywords,
+    normalize_phrase,
+)
 from .view_routing import apply_legacy_view_settings, match_view, resolve_view_path
 
 _LOGGER = logging.getLogger(__name__)
@@ -112,6 +117,26 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
             DEFAULT_KEYWORDS,
         )
 
+        acknowledgement = str(
+            settings.get(
+                CONF_OPENCLAW_ACK_MESSAGE,
+                DEFAULT_OPENCLAW_ACK_MESSAGE,
+            )
+        ).strip()
+
+        # Defensive echo guard: some satellites can hear their own TTS when a
+        # conversation remains open. Never route the OpenClaw acknowledgement
+        # back into OpenClaw, otherwise it can repeat indefinitely.
+        if (
+            acknowledgement
+            and normalize_phrase(user_input.text)
+            == normalize_phrase(acknowledgement)
+        ):
+            _LOGGER.warning(
+                "Discarded an OpenClaw acknowledgement echoed back by STT"
+            )
+            return self._silent_result(user_input)
+
         if matches_end_phrase(
             user_input.text,
             str(settings.get(CONF_END_PHRASES, DEFAULT_END_PHRASES)),
@@ -160,10 +185,6 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
         )
 
         if route == ROUTE_OPENCLAW:
-            acknowledgement = settings.get(
-                CONF_OPENCLAW_ACK_MESSAGE,
-                DEFAULT_OPENCLAW_ACK_MESSAGE,
-            ).strip()
             instruction = settings.get(
                 CONF_OPENCLAW_BACKGROUND_INSTRUCTION,
                 DEFAULT_OPENCLAW_BACKGROUND_INSTRUCTION,
@@ -212,10 +233,15 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
                     category="openclaw",
                 )
 
+            # OpenClaw is deliberately fire-and-forget. Do not preserve the
+            # conversation ID and explicitly disable follow-up listening, or a
+            # satellite may transcribe its own acknowledgement and re-enter
+            # this branch.
             return self._speech_result(
                 user_input,
                 acknowledgement or DEFAULT_OPENCLAW_ACK_MESSAGE,
-                conversation_id=base_conversation_id,
+                conversation_id=None,
+                continue_conversation=False,
             )
 
         result = await self._async_converse(
@@ -851,14 +877,38 @@ class AssistRouterConversationEntity(conversation.ConversationEntity):
         message: str,
         *,
         conversation_id: str | None,
+        continue_conversation: bool = False,
     ) -> conversation.ConversationResult:
-        """Create an immediate voice response."""
+        """Create an immediate voice response with an explicit session state."""
         response = intent.IntentResponse(language=user_input.language)
         response.async_set_speech(message)
-        return conversation.ConversationResult(
-            response=response,
-            conversation_id=conversation_id,
-        )
+        result_kwargs: dict[str, Any] = {
+            "response": response,
+            "conversation_id": conversation_id,
+        }
+        result_signature = inspect.signature(
+            conversation.ConversationResult
+        ).parameters
+        if "continue_conversation" in result_signature:
+            result_kwargs["continue_conversation"] = continue_conversation
+        return conversation.ConversationResult(**result_kwargs)
+
+    @staticmethod
+    def _silent_result(
+        user_input: conversation.ConversationInput,
+    ) -> conversation.ConversationResult:
+        """End an echoed turn without producing another TTS response."""
+        response = intent.IntentResponse(language=user_input.language)
+        result_kwargs: dict[str, Any] = {
+            "response": response,
+            "conversation_id": None,
+        }
+        result_signature = inspect.signature(
+            conversation.ConversationResult
+        ).parameters
+        if "continue_conversation" in result_signature:
+            result_kwargs["continue_conversation"] = False
+        return conversation.ConversationResult(**result_kwargs)
 
     @staticmethod
     def _error_result(
