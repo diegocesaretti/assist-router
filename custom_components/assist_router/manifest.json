@@ -1,0 +1,13 @@
+{
+  "domain": "assist_router",
+  "name": "Assist Router",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": [
+    "conversation"
+  ],
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "requirements": [],
+  "version": "0.4.0"
+}
