@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from string import Formatter
 from typing import Any
 
 import voluptuous as vol
@@ -34,6 +35,15 @@ from .const import (
     CONF_OPENCLAW_BACKGROUND_INSTRUCTION,
     CONF_GENERAL_ROUTER_INSTRUCTION,
     CONF_FORCE_OPENCLAW_PHRASES,
+    CONF_STREMIO_ENABLED,
+    CONF_STREMIO_ENTRY_ID,
+    CONF_STREMIO_DEFAULT_PLAYER,
+    CONF_STREMIO_TV_ALIASES,
+    CONF_STREMIO_RESULT_LIMIT,
+    CONF_STREMIO_VIEW_ENABLED,
+    CONF_STREMIO_VIEW_PATH,
+    CONF_STREMIO_PLAY_ACK,
+    CONF_STREMIO_PENDING_TIMEOUT,
     CONF_OPENCLAW_VIEW_PATH,
     CONF_OPENCLAW_VIEW_ENABLED,
     CONF_OPENCLAW_VIEW_PATH_V2,
@@ -56,6 +66,15 @@ from .const import (
     DEFAULT_KEYWORDS,
     DEFAULT_GENERAL_ROUTER_INSTRUCTION,
     DEFAULT_FORCE_OPENCLAW_PHRASES,
+    DEFAULT_STREMIO_ENABLED,
+    DEFAULT_STREMIO_ENTRY_ID,
+    DEFAULT_STREMIO_DEFAULT_PLAYER,
+    DEFAULT_STREMIO_TV_ALIASES,
+    DEFAULT_STREMIO_RESULT_LIMIT,
+    DEFAULT_STREMIO_VIEW_ENABLED,
+    DEFAULT_STREMIO_VIEW_PATH,
+    DEFAULT_STREMIO_PLAY_ACK,
+    DEFAULT_STREMIO_PENDING_TIMEOUT,
     DEFAULT_OPENCLAW_ACK_MESSAGE,
     DEFAULT_OPENCLAW_BACKGROUND_INSTRUCTION,
     DEFAULT_OPENCLAW_VIEW_ENABLED,
@@ -63,7 +82,6 @@ from .const import (
     DEFAULT_VIEW_ASSIST_ENABLED,
     DEFAULT_VIEW_ASSIST_ENTITY,
     DEFAULT_VIEW_NAVIGATION_DELAY,
-    DEFAULT_VIEW_REVERT_TIMEOUT,
     DEFAULT_RESPONSE_VIEW_ENABLED,
     DEFAULT_RESPONSE_VIEW_PATH,
     DEFAULT_RESPONSE_DISPLAY_TIME,
@@ -75,7 +93,9 @@ from .const import (
     DOMAIN,
     LEGACY_DEFAULT_KEYWORDS_0_1_3,
     VIEW_ASSIST_AUTO_ENTITY,
+    STREMIO_AUTO_ENTRY,
 )
+from .stremio import canonicalize_tv_aliases
 from .routing import (
     canonicalize_keywords,
     canonicalize_phrases,
@@ -144,6 +164,14 @@ def _view_assist_entity_options(hass: HomeAssistant) -> dict[str, str]:
     return options
 
 
+def _stremio_entry_options(hass: HomeAssistant) -> dict[str, str]:
+    """Return Stream Bridge entries plus automatic single-entry selection."""
+    options = {STREMIO_AUTO_ENTRY: "Automático: usar la única entrada cargada"}
+    for entry in hass.config_entries.async_entries("stremio_stream_bridge"):
+        options[entry.entry_id] = entry.title or entry.entry_id
+    return options
+
+
 def _required_with_default(
     key: str,
     value: Any,
@@ -208,6 +236,15 @@ def _base_defaults() -> dict[str, Any]:
         CONF_FOLLOW_UP_ENABLED: DEFAULT_FOLLOW_UP_ENABLED,
         CONF_GENERAL_ROUTER_INSTRUCTION: DEFAULT_GENERAL_ROUTER_INSTRUCTION,
         CONF_FORCE_OPENCLAW_PHRASES: DEFAULT_FORCE_OPENCLAW_PHRASES,
+        CONF_STREMIO_ENABLED: DEFAULT_STREMIO_ENABLED,
+        CONF_STREMIO_ENTRY_ID: DEFAULT_STREMIO_ENTRY_ID,
+        CONF_STREMIO_DEFAULT_PLAYER: DEFAULT_STREMIO_DEFAULT_PLAYER,
+        CONF_STREMIO_TV_ALIASES: DEFAULT_STREMIO_TV_ALIASES,
+        CONF_STREMIO_RESULT_LIMIT: DEFAULT_STREMIO_RESULT_LIMIT,
+        CONF_STREMIO_VIEW_ENABLED: DEFAULT_STREMIO_VIEW_ENABLED,
+        CONF_STREMIO_VIEW_PATH: DEFAULT_STREMIO_VIEW_PATH,
+        CONF_STREMIO_PLAY_ACK: DEFAULT_STREMIO_PLAY_ACK,
+        CONF_STREMIO_PENDING_TIMEOUT: DEFAULT_STREMIO_PENDING_TIMEOUT,
         CONF_OPENCLAW_ACK_MESSAGE: DEFAULT_OPENCLAW_ACK_MESSAGE,
         CONF_OPENCLAW_BACKGROUND_INSTRUCTION: DEFAULT_OPENCLAW_BACKGROUND_INSTRUCTION,
         CONF_VIEW_ASSIST_ENABLED: DEFAULT_VIEW_ASSIST_ENABLED,
@@ -338,6 +375,114 @@ def _normalize_general(user_input: dict[str, Any]) -> dict[str, Any]:
     ].strip()
     normalized[CONF_FORCE_OPENCLAW_PHRASES] = canonicalize_phrases(
         normalized[CONF_FORCE_OPENCLAW_PHRASES]
+    )
+    return normalized
+
+
+def _stremio_schema(
+    defaults: dict[str, Any], entry_options: dict[str, str]
+) -> vol.Schema:
+    """Build the local Stremio skill form."""
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_STREMIO_ENABLED,
+                default=defaults.get(CONF_STREMIO_ENABLED, DEFAULT_STREMIO_ENABLED),
+            ): bool,
+            _required_with_default(
+                CONF_STREMIO_ENTRY_ID,
+                defaults.get(CONF_STREMIO_ENTRY_ID, DEFAULT_STREMIO_ENTRY_ID),
+                entry_options,
+                fallback=STREMIO_AUTO_ENTRY,
+            ): vol.In(entry_options),
+            vol.Required(
+                CONF_STREMIO_DEFAULT_PLAYER,
+                default=defaults.get(
+                    CONF_STREMIO_DEFAULT_PLAYER, DEFAULT_STREMIO_DEFAULT_PLAYER
+                ),
+            ): TextSelector(TextSelectorConfig(multiline=False)),
+            vol.Required(
+                CONF_STREMIO_TV_ALIASES,
+                default=defaults.get(CONF_STREMIO_TV_ALIASES, DEFAULT_STREMIO_TV_ALIASES),
+            ): TextSelector(TextSelectorConfig(multiline=True)),
+            vol.Required(
+                CONF_STREMIO_RESULT_LIMIT,
+                default=defaults.get(CONF_STREMIO_RESULT_LIMIT, DEFAULT_STREMIO_RESULT_LIMIT),
+            ): vol.All(vol.Coerce(int), vol.Range(min=1, max=10)),
+            vol.Required(
+                CONF_STREMIO_PENDING_TIMEOUT,
+                default=defaults.get(
+                    CONF_STREMIO_PENDING_TIMEOUT, DEFAULT_STREMIO_PENDING_TIMEOUT
+                ),
+            ): vol.All(vol.Coerce(int), vol.Range(min=30, max=600)),
+            vol.Required(
+                CONF_STREMIO_PLAY_ACK,
+                default=defaults.get(CONF_STREMIO_PLAY_ACK, DEFAULT_STREMIO_PLAY_ACK),
+            ): TextSelector(TextSelectorConfig(multiline=False)),
+            vol.Required(
+                CONF_STREMIO_VIEW_ENABLED,
+                default=defaults.get(
+                    CONF_STREMIO_VIEW_ENABLED, DEFAULT_STREMIO_VIEW_ENABLED
+                ),
+            ): bool,
+            vol.Required(
+                CONF_STREMIO_VIEW_PATH,
+                default=defaults.get(CONF_STREMIO_VIEW_PATH, DEFAULT_STREMIO_VIEW_PATH),
+            ): TextSelector(TextSelectorConfig(multiline=False)),
+        }
+    )
+
+
+def _validate_stremio(user_input: dict[str, Any]) -> dict[str, str]:
+    """Validate Stremio skill options without requiring the other integration."""
+    errors: dict[str, str] = {}
+    player = str(user_input[CONF_STREMIO_DEFAULT_PLAYER]).strip()
+    if player and not player.startswith("media_player."):
+        errors[CONF_STREMIO_DEFAULT_PLAYER] = "invalid_media_player"
+    aliases = str(user_input[CONF_STREMIO_TV_ALIASES])
+    invalid_alias_line = any(
+        line.strip()
+        and not line.lstrip().startswith("#")
+        and ("=" not in line or not line.split("=", 1)[1].strip().startswith("media_player."))
+        for line in aliases.splitlines()
+    )
+    if invalid_alias_line:
+        errors[CONF_STREMIO_TV_ALIASES] = "invalid_tv_aliases"
+    acknowledgement = str(user_input[CONF_STREMIO_PLAY_ACK]).strip()
+    if not acknowledgement:
+        errors[CONF_STREMIO_PLAY_ACK] = "stremio_ack_required"
+    else:
+        try:
+            fields = {
+                field_name
+                for _, field_name, _, _ in Formatter().parse(acknowledgement)
+                if field_name
+            }
+        except ValueError:
+            fields = {"__invalid__"}
+        if fields - {"title", "target"}:
+            errors[CONF_STREMIO_PLAY_ACK] = "invalid_stremio_ack_template"
+    if user_input[CONF_STREMIO_VIEW_ENABLED] and not validate_view_path(
+        user_input[CONF_STREMIO_VIEW_PATH]
+    ):
+        errors[CONF_STREMIO_VIEW_PATH] = "invalid_view_path"
+    return errors
+
+
+def _normalize_stremio(user_input: dict[str, Any]) -> dict[str, Any]:
+    """Normalize Stremio skill options."""
+    normalized = dict(user_input)
+    normalized[CONF_STREMIO_DEFAULT_PLAYER] = str(
+        normalized[CONF_STREMIO_DEFAULT_PLAYER]
+    ).strip()
+    normalized[CONF_STREMIO_TV_ALIASES] = canonicalize_tv_aliases(
+        str(normalized[CONF_STREMIO_TV_ALIASES])
+    )
+    normalized[CONF_STREMIO_PLAY_ACK] = str(
+        normalized[CONF_STREMIO_PLAY_ACK]
+    ).strip()
+    normalized[CONF_STREMIO_VIEW_PATH] = normalize_view_path(
+        normalized[CONF_STREMIO_VIEW_PATH]
     )
     return normalized
 
@@ -629,11 +774,30 @@ class AssistRouterConfigFlow(ConfigFlow, domain=DOMAIN):
             errors = _validate_general(user_input)
             if not errors:
                 self._pending.update(_normalize_general(user_input))
-                return await self.async_step_openclaw()
+                return await self.async_step_stremio()
 
         return self.async_show_form(
             step_id="general",
             data_schema=_general_schema(user_input or self._pending),
+            errors=errors,
+        )
+
+    async def async_step_stremio(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Configure the local Stremio voice skill."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            errors = _validate_stremio(user_input)
+            if not errors:
+                self._pending.update(_normalize_stremio(user_input))
+                return await self.async_step_openclaw()
+
+        return self.async_show_form(
+            step_id="stremio",
+            data_schema=_stremio_schema(
+                user_input or self._pending, _stremio_entry_options(self.hass)
+            ),
             errors=errors,
         )
 
@@ -720,6 +884,7 @@ class AssistRouterOptionsFlow(OptionsFlow):
             menu_options=[
                 "routing",
                 "general",
+                "stremio",
                 "conversation",
                 "openclaw",
                 "view_assist",
@@ -769,6 +934,28 @@ class AssistRouterOptionsFlow(OptionsFlow):
             step_id="edit_general",
             data_schema=_general_schema(
                 user_input or _effective_settings(self._entry)
+            ),
+            errors=errors,
+        )
+
+    async def async_step_stremio(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        return self._show_section_menu("stremio", "edit_stremio")
+
+    async def async_step_edit_stremio(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            errors = _validate_stremio(user_input)
+            if not errors:
+                return await self._save_and_return(_normalize_stremio(user_input))
+        return self.async_show_form(
+            step_id="edit_stremio",
+            data_schema=_stremio_schema(
+                user_input or _effective_settings(self._entry),
+                _stremio_entry_options(self.hass),
             ),
             errors=errors,
         )

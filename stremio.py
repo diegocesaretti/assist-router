@@ -71,6 +71,32 @@
           "general_router_instruction": "El agente general responderá recetas, interés general, explicaciones y consultas simples. Solo derivará cuando estos criterios indiquen que necesita herramientas o trabajo prolongado.",
           "force_openclaw_phrases": "Una frase por línea. Puede aparecer dentro de un pedido más largo. Estas frases saltan el clasificador y lanzan OpenClaw directamente."
         }
+      },
+      "stremio": {
+        "title": "Stremio y televisores",
+        "description": "Configurá la skill local que busca películas y series mediante Stremio Stream Bridge antes de enviar la frase a los agentes.",
+        "data": {
+          "stremio_enabled": "Activar comandos de Stremio",
+          "stremio_entry_id": "Entrada de Stremio Stream Bridge",
+          "stremio_default_player": "Tele predeterminada opcional",
+          "stremio_tv_aliases": "Aliases de televisores",
+          "stremio_result_limit": "Máximo de opciones al preguntar",
+          "stremio_pending_timeout": "Segundos para responder una elección",
+          "stremio_play_ack": "Respuesta al iniciar reproducción",
+          "stremio_view_enabled": "Mostrar una vista de Stremio",
+          "stremio_view_path": "Vista de Stremio"
+        },
+        "data_description": {
+          "stremio_enabled": "Detecta frases como ‘Poné Matrix en la tele’ antes del filtro de domótica.",
+          "stremio_entry_id": "Automático funciona cuando hay una sola entrada cargada. Elegí una entrada concreta si tenés varias.",
+          "stremio_default_player": "Entidad media_player. Dejalo vacío para usar el reproductor predeterminado configurado en Stream Bridge.",
+          "stremio_tv_aliases": "Una línea por tele. Formato: living, sala = media_player.tv_living",
+          "stremio_result_limit": "Cantidad máxima de títulos que se leen y muestran cuando la búsqueda es ambigua.",
+          "stremio_pending_timeout": "Tiempo durante el cual podés responder ‘la segunda’ o indicar temporada y capítulo.",
+          "stremio_play_ack": "Admite {title} y {target}. Ejemplo: Preparando {title} en {target}.",
+          "stremio_view_enabled": "Muestra póster, estado y alternativas en View Assist.",
+          "stremio_view_path": "Usá infopic, info, stremio o una ruta absoluta del dashboard."
+        }
       }
     },
     "error": {
@@ -86,7 +112,11 @@
       "end_phrases_required": "Ingresá al menos una frase para cerrar la conversación.",
       "general_openclaw_must_differ": "El agente general no puede ser el mismo agente OpenClaw.",
       "general_instruction_required": "Ingresá criterios para que el agente general sepa cuándo derivar a OpenClaw.",
-      "response_max_before_min": "El tiempo máximo debe ser igual o mayor que el mínimo."
+      "response_max_before_min": "El tiempo máximo debe ser igual o mayor que el mínimo.",
+      "invalid_media_player": "La entidad debe empezar con media_player. o quedar vacía.",
+      "invalid_tv_aliases": "Usá una línea por tele con el formato alias = media_player.entidad.",
+      "stremio_ack_required": "Ingresá una respuesta para confirmar la reproducción.",
+      "invalid_stremio_ack_template": "Usá solamente {title} y {target} en la respuesta de reproducción."
     },
     "abort": {
       "already_configured": "Assist Router ya está configurado."
@@ -110,7 +140,8 @@
           "view_music": "Música y multimedia",
           "view_list": "Listas y tareas",
           "view_sports": "Deportes",
-          "view_domotics": "Domótica general"
+          "view_domotics": "Domótica general",
+          "stremio": "Stremio y televisores"
         }
       },
       "routing": {
@@ -414,6 +445,40 @@
           "view_domotics_path": "Podés escribir solo el nombre, por ejemplo 'weather'. El router agregará automáticamente la ruta real del dashboard. También se acepta una ruta completa que empiece con /.",
           "view_domotics_keywords": "Una palabra por línea. Se comparan primero con la respuesta final y, si no hay coincidencias, con la frase original del STT."
         }
+      },
+      "stremio": {
+        "title": "Stremio y televisores",
+        "description": "Elegí editar esta sección o volver al menú principal.",
+        "menu_options": {
+          "edit_stremio": "Editar configuración",
+          "init": "← Volver"
+        }
+      },
+      "edit_stremio": {
+        "title": "Stremio y televisores",
+        "description": "Configurá la skill local que busca películas y series mediante Stremio Stream Bridge antes de enviar la frase a los agentes.",
+        "data": {
+          "stremio_enabled": "Activar comandos de Stremio",
+          "stremio_entry_id": "Entrada de Stremio Stream Bridge",
+          "stremio_default_player": "Tele predeterminada opcional",
+          "stremio_tv_aliases": "Aliases de televisores",
+          "stremio_result_limit": "Máximo de opciones al preguntar",
+          "stremio_pending_timeout": "Segundos para responder una elección",
+          "stremio_play_ack": "Respuesta al iniciar reproducción",
+          "stremio_view_enabled": "Mostrar una vista de Stremio",
+          "stremio_view_path": "Vista de Stremio"
+        },
+        "data_description": {
+          "stremio_enabled": "Detecta frases como ‘Poné Matrix en la tele’ antes del filtro de domótica.",
+          "stremio_entry_id": "Automático funciona cuando hay una sola entrada cargada. Elegí una entrada concreta si tenés varias.",
+          "stremio_default_player": "Entidad media_player. Dejalo vacío para usar el reproductor predeterminado configurado en Stream Bridge.",
+          "stremio_tv_aliases": "Una línea por tele. Formato: living, sala = media_player.tv_living",
+          "stremio_result_limit": "Cantidad máxima de títulos que se leen y muestran cuando la búsqueda es ambigua.",
+          "stremio_pending_timeout": "Tiempo durante el cual podés responder ‘la segunda’ o indicar temporada y capítulo.",
+          "stremio_play_ack": "Admite {title} y {target}. Ejemplo: Preparando {title} en {target}.",
+          "stremio_view_enabled": "Muestra póster, estado y alternativas en View Assist.",
+          "stremio_view_path": "Usá infopic, info, stremio o una ruta absoluta del dashboard."
+        }
       }
     },
     "error": {
@@ -428,7 +493,11 @@
       "not_enough_agents": "No hay al menos tres agentes de conversación cargados. Configurá domótica, un agente general y OpenClaw, reiniciá Home Assistant y volvé a intentar.",
       "general_openclaw_must_differ": "El agente general no puede ser el mismo agente OpenClaw.",
       "general_instruction_required": "Ingresá criterios para que el agente general sepa cuándo derivar a OpenClaw.",
-      "response_max_before_min": "El tiempo máximo debe ser igual o mayor que el mínimo."
+      "response_max_before_min": "El tiempo máximo debe ser igual o mayor que el mínimo.",
+      "invalid_media_player": "La entidad debe empezar con media_player. o quedar vacía.",
+      "invalid_tv_aliases": "Usá una línea por tele con el formato alias = media_player.entidad.",
+      "stremio_ack_required": "Ingresá una respuesta para confirmar la reproducción.",
+      "invalid_stremio_ack_template": "Usá solamente {title} y {target} en la respuesta de reproducción."
     }
   }
 }

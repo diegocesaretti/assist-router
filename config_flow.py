@@ -11,6 +11,16 @@ CONF_OPENCLAW_BACKGROUND_INSTRUCTION = "openclaw_background_instruction"
 CONF_GENERAL_ROUTER_INSTRUCTION = "general_router_instruction"
 CONF_FORCE_OPENCLAW_PHRASES = "force_openclaw_phrases"
 
+CONF_STREMIO_ENABLED = "stremio_enabled"
+CONF_STREMIO_ENTRY_ID = "stremio_entry_id"
+CONF_STREMIO_DEFAULT_PLAYER = "stremio_default_player"
+CONF_STREMIO_TV_ALIASES = "stremio_tv_aliases"
+CONF_STREMIO_RESULT_LIMIT = "stremio_result_limit"
+CONF_STREMIO_VIEW_ENABLED = "stremio_view_enabled"
+CONF_STREMIO_VIEW_PATH = "stremio_view_path"
+CONF_STREMIO_PLAY_ACK = "stremio_play_ack"
+CONF_STREMIO_PENDING_TIMEOUT = "stremio_pending_timeout"
+
 CONF_END_PHRASES = "end_phrases"
 CONF_END_RESPONSE = "end_response"
 CONF_END_VIEW_HOME = "end_view_home"
@@ -145,6 +155,17 @@ revisa mis correos
 mis archivos
 en mi pc"""
 
+STREMIO_AUTO_ENTRY = "__auto__"
+DEFAULT_STREMIO_ENABLED = True
+DEFAULT_STREMIO_ENTRY_ID = STREMIO_AUTO_ENTRY
+DEFAULT_STREMIO_DEFAULT_PLAYER = ""
+DEFAULT_STREMIO_TV_ALIASES = ""
+DEFAULT_STREMIO_RESULT_LIMIT = 5
+DEFAULT_STREMIO_VIEW_ENABLED = True
+DEFAULT_STREMIO_VIEW_PATH = "infopic"
+DEFAULT_STREMIO_PLAY_ACK = "Preparando {title} en {target}."
+DEFAULT_STREMIO_PENDING_TIMEOUT = 120
+
 DEFAULT_OPENCLAW_BACKGROUND_INSTRUCTION = (
     "Esta solicitud fue delegada en segundo plano desde Home Assistant. "
     "Procesala completamente y, cuando termines, enviá el resultado al usuario "
@@ -167,6 +188,7 @@ DEFAULT_RELATED_VIEW_DISPLAY_TIME = 5
 DEFAULT_OPENCLAW_VIEW_ENABLED = True
 DEFAULT_OPENCLAW_VIEW_PATH = "info"
 
+ROUTE_STREMIO = "stremio"
 ROUTE_DOMOTICS = "domotics"
 ROUTE_GENERAL = "general"
 ROUTE_OPENCLAW = "openclaw"

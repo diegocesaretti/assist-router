@@ -1,479 +1,512 @@
-"""Standalone smoke tests for background routing and View Assist navigation."""
+"""Deterministic parsing helpers for the Stremio voice skill."""
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
-from pathlib import Path
-import sys
-import types
+import re
+import unicodedata
+from typing import Any
 
-PROJECT_ROOT = Path(__file__).parent
-sys.path.insert(0, str(PROJECT_ROOT))
+STREMIO_DOMAIN = "stremio_stream_bridge"
+STREMIO_RESOLVE_SERVICE = "resolve"
+STREMIO_PLAY_SERVICE = "play"
 
-# Minimal Home Assistant stubs so the integration can be tested without the
-# full Home Assistant package.
-homeassistant = types.ModuleType("homeassistant")
-sys.modules["homeassistant"] = homeassistant
+_PROFILE_DEFAULT = "default"
+_PROFILE_LATIN = "latin"
+_PROFILE_SPORTS = "sports"
 
-components = types.ModuleType("homeassistant.components")
-sys.modules["homeassistant.components"] = components
-conversation = types.ModuleType("homeassistant.components.conversation")
-sys.modules["homeassistant.components.conversation"] = conversation
-components.conversation = conversation
+_NUMBER_WORDS = {
+    "cero": 0,
+    "un": 1,
+    "uno": 1,
+    "una": 1,
+    "primer": 1,
+    "primero": 1,
+    "primera": 1,
+    "dos": 2,
+    "segundo": 2,
+    "segunda": 2,
+    "tres": 3,
+    "tercer": 3,
+    "tercero": 3,
+    "tercera": 3,
+    "cuatro": 4,
+    "cuarto": 4,
+    "cuarta": 4,
+    "cinco": 5,
+    "quinto": 5,
+    "quinta": 5,
+    "seis": 6,
+    "sexto": 6,
+    "sexta": 6,
+    "siete": 7,
+    "septimo": 7,
+    "septima": 7,
+    "ocho": 8,
+    "octavo": 8,
+    "octava": 8,
+    "nueve": 9,
+    "noveno": 9,
+    "novena": 9,
+    "diez": 10,
+    "decimo": 10,
+    "decima": 10,
+    "once": 11,
+    "doce": 12,
+    "trece": 13,
+    "catorce": 14,
+    "quince": 15,
+    "dieciseis": 16,
+    "diecisiete": 17,
+    "dieciocho": 18,
+    "diecinueve": 19,
+    "veinte": 20,
+}
+
+_NORMALIZED_NUMBER_PATTERN = "(?:" + "|".join(
+    sorted((re.escape(word) for word in _NUMBER_WORDS), key=len, reverse=True)
+) + r"|\d+)"
+
+_PLAY_PREFIX_RE = re.compile(
+    r"^\s*(?:pon(?:e|é)(?:me)?|reproduc(?:e|í)(?:me)?|pas(?:a|á)(?:me)?|"
+    r"abr(?:e|í)|quiero\s+(?:ver|mirar)|vamos\s+a\s+ver|"
+    r"mostr(?:a|á)me|dale\s+play\s+a)\s+",
+    re.IGNORECASE,
+)
+_STRONG_MARKER_RE = re.compile(
+    r"\b(?:stremio|pel[ií]cula|serie|temporada|cap[ií]tulo|episodio|"
+    r"audio\s+latino|en\s+latino|subtitulad[oa]s?|sin\s+subt[ií]tulos?|"
+    r"con\s+subt[ií]tulos?|f[oó]rmula\s*1|f1|deportes?)\b",
+    re.IGNORECASE,
+)
+_TV_MARKER_RE = re.compile(r"\b(?:tele|televisor|tv|android\s*tv)\b", re.IGNORECASE)
+_MEDIA_VERB_RE = re.compile(
+    r"^\s*(?:reproduc(?:e|í)|quiero\s+(?:ver|mirar)|vamos\s+a\s+ver)\b",
+    re.IGNORECASE,
+)
 
 
-class ConversationEntity:
-    async def async_added_to_hass(self):
-        return None
+@dataclass(frozen=True, slots=True)
+class StremioRequest:
+    """Parsed request sent to the Stream Bridge resolver."""
 
-    async def async_will_remove_from_hass(self):
-        return None
-
-
-class ConversationEntityFeature:
-    CONTROL = 1
-
-
-@dataclass
-class ConversationInput:
-    text: str
-    conversation_id: str | None = None
-    context: object | None = None
-    language: str = "es"
-    device_id: str | None = None
-    satellite_id: str | None = None
-    extra_system_prompt: str | None = None
+    query: str
+    media_type: str = "all"
+    profile: str = _PROFILE_DEFAULT
+    season: int | None = None
+    episode: int | None = None
+    year: int | None = None
+    disable_subtitles: bool = False
+    media_player: str | None = None
+    target_label: str | None = None
+    strong: bool = False
 
 
-@dataclass
-class ConversationResult:
-    response: object
-    conversation_id: str | None
-    continue_conversation: bool = False
+@dataclass(slots=True)
+class PendingStremioRequest:
+    """Short-lived conversational state for ambiguity or episode follow-up."""
+
+    kind: str
+    request: StremioRequest
+    results: list[dict[str, Any]]
+    selected: dict[str, Any] | None
+    expires_at: float
 
 
-conversation.ConversationEntity = ConversationEntity
-conversation.ConversationEntityFeature = ConversationEntityFeature
-conversation.ConversationInput = ConversationInput
-conversation.ConversationResult = ConversationResult
-conversation.async_set_agent = lambda *args: None
-conversation.async_unset_agent = lambda *args: None
-
-CALLS: list[dict[str, object]] = []
-
-
-async def async_converse(
-    hass,
-    text,
-    conversation_id,
-    context,
-    language,
-    agent_id,
-    device_id=None,
-    satellite_id=None,
-    extra_system_prompt=None,
-):
-    CALLS.append(
-        {
-            "text": text,
-            "conversation_id": conversation_id,
-            "agent_id": agent_id,
-            "extra_system_prompt": extra_system_prompt,
-        }
+def normalize_text(value: str) -> str:
+    """Normalize spoken text for matching while preserving numbers."""
+    decomposed = unicodedata.normalize("NFKD", value.casefold())
+    without_marks = "".join(
+        character for character in decomposed if not unicodedata.combining(character)
     )
-    if agent_id == "openclaw":
-        await asyncio.sleep(0.05)
-        speech = "La tarea de OpenClaw terminó"
-    elif agent_id == "general":
-        if "correos" in text.casefold():
-            speech = "[[ASSIST_ROUTER:OPENCLAW]]"
-        elif "salsa" in text.casefold():
-            speech = "Para una salsa blanca usá leche, harina y manteca."
-        else:
-            speech = "Esta es una respuesta general rápida."
-    else:
-        speech = "La luz del living quedó encendida"
-    response = IntentResponse(language)
-    response.async_set_speech(speech)
-    return ConversationResult(response, conversation_id)
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", without_marks).split())
 
 
-conversation.async_converse = async_converse
-
-agent_manager = types.ModuleType(
-    "homeassistant.components.conversation.agent_manager"
-)
-sys.modules[
-    "homeassistant.components.conversation.agent_manager"
-] = agent_manager
-agent_manager.async_get_agent = lambda hass, agent_id: object()
-
-config_entries = types.ModuleType("homeassistant.config_entries")
-sys.modules["homeassistant.config_entries"] = config_entries
-
-
-class ConfigEntry:
-    def __init__(self):
-        self.entry_id = "router-entry"
-        self.data = {
-            "domotics_agent": "gemini",
-            "general_agent": "general",
-            "openclaw_agent": "openclaw",
-            "general_router_instruction": (
-                "Derivar correo, archivos, PC y WhatsApp; responder recetas."
-            ),
-            "force_openclaw_phrases": "openclaw\npor whatsapp\nen mi pc",
-            "keywords": "luz\naire",
-            "view_assist_enabled": True,
-            "view_assist_entity": "__auto__",
-            "view_rules": (
-                "domotica|/view-assist/intent|luz, encendida, apagada\n"
-                "clima|/view-assist/weather|clima, lluvia"
-            ),
-            "view_revert_timeout": 20,
-            "view_navigation_delay": 0,
-            "view_response_enabled": True,
-            "view_response_path": "info",
-            "view_response_display_time": 0,
-            "view_related_display_time": 1,
-            "follow_up_enabled": True,
-            "openclaw_view_path": "/view-assist/info",
-            "end_phrases": "chau\ngracias\nok\nbueno\nhasta luego",
-            "end_response": "Hasta luego.",
-            "end_view_home": True,
-        }
-        self.options = {}
+def parse_tv_aliases(value: str) -> dict[str, str]:
+    """Parse `alias, alias = media_player.entity` lines."""
+    aliases: dict[str, str] = {}
+    for raw_line in value.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        names, entity_id = line.split("=", 1)
+        entity_id = entity_id.strip()
+        if not entity_id.startswith("media_player."):
+            continue
+        for name in names.split(","):
+            normalized = normalize_text(name)
+            if normalized:
+                aliases[normalized] = entity_id
+    return aliases
 
 
-config_entries.ConfigEntry = ConfigEntry
-
-const = types.ModuleType("homeassistant.const")
-sys.modules["homeassistant.const"] = const
-const.MATCH_ALL = "*"
-
-class Platform:
-    CONVERSATION = "conversation"
-
-const.Platform = Platform
-
-core = types.ModuleType("homeassistant.core")
-sys.modules["homeassistant.core"] = core
-core.HomeAssistant = object
-
-helpers = types.ModuleType("homeassistant.helpers")
-sys.modules["homeassistant.helpers"] = helpers
-intent = types.ModuleType("homeassistant.helpers.intent")
-sys.modules["homeassistant.helpers.intent"] = intent
-helpers.intent = intent
+def canonicalize_tv_aliases(value: str) -> str:
+    """Normalize whitespace without changing user-visible aliases."""
+    lines: list[str] = []
+    for raw_line in value.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if "=" not in line:
+            lines.append(line)
+            continue
+        names, entity_id = line.split("=", 1)
+        clean_names = ", ".join(
+            name.strip() for name in names.split(",") if name.strip()
+        )
+        lines.append(f"{clean_names} = {entity_id.strip()}")
+    return "\n".join(lines)
 
 
-class IntentResponseErrorCode:
-    UNKNOWN = "unknown"
+def parse_stremio_request(
+    text: str,
+    *,
+    aliases: dict[str, str] | None = None,
+    default_player: str | None = None,
+) -> StremioRequest | None:
+    """Parse a natural Spanish request without stealing ordinary domotics."""
+    aliases = aliases or {}
+    normalized = normalize_text(text)
+    has_prefix = bool(_PLAY_PREFIX_RE.search(text))
+    strong = bool(_STRONG_MARKER_RE.search(text))
+    has_tv = bool(_TV_MARKER_RE.search(text))
+    has_alias_target = _find_target_alias(normalized, aliases) is not None
+    media_verb = bool(_MEDIA_VERB_RE.search(text))
 
+    # A media noun alone is not an action. This prevents questions such as
+    # “¿Quién actuó en la película Matrix?” from being stolen from the general
+    # agent. Explicit play/view wording is always required.
+    if not (has_prefix or media_verb):
+        return None
+    if not strong and not (has_tv or has_alias_target or media_verb):
+        return None
 
-class IntentResponse:
-    def __init__(self, language):
-        self.language = language
-        self.speech = None
-        self.error = None
+    media_type = "all"
+    if re.search(r"\b(?:serie|temporada|capitulo|episodio)\b", normalized):
+        media_type = "series"
+    elif re.search(r"\bpelicula\b", normalized):
+        media_type = "movie"
 
-    def async_set_speech(self, message):
-        self.speech = {"plain": {"speech": message}}
-
-    def async_set_error(self, code, message):
-        self.error = (code, message)
-        self.speech = {"plain": {"speech": message}}
-
-    def as_dict(self):
-        return {"speech": self.speech}
-
-
-intent.IntentResponse = IntentResponse
-intent.IntentResponseErrorCode = IntentResponseErrorCode
-
-entity_platform = types.ModuleType("homeassistant.helpers.entity_platform")
-sys.modules["homeassistant.helpers.entity_platform"] = entity_platform
-entity_platform.AddEntitiesCallback = object
-
-entity_registry = types.ModuleType("homeassistant.helpers.entity_registry")
-sys.modules["homeassistant.helpers.entity_registry"] = entity_registry
-helpers.entity_registry = entity_registry
-
-
-@dataclass
-class RegistryEntry:
-    entity_id: str
-    domain: str
-    device_id: str | None = None
-
-
-class FakeRegistry:
-    def __init__(self):
-        self.entries = {
-            "assist_satellite.kitchen": RegistryEntry(
-                "assist_satellite.kitchen", "assist_satellite", "device-kitchen"
-            ),
-            "sensor.viewassist_kitchen": RegistryEntry(
-                "sensor.viewassist_kitchen", "sensor", "view-device-kitchen"
-            ),
-        }
-
-    def async_get(self, entity_id):
-        return self.entries.get(entity_id)
-
-
-REGISTRY = FakeRegistry()
-entity_registry.async_get = lambda hass: REGISTRY
-entity_registry.async_entries_for_config_entry = lambda registry, entry_id: (
-    [REGISTRY.entries["sensor.viewassist_kitchen"]]
-    if entry_id == "va-entry"
-    else []
-)
-
-from custom_components.assist_router.conversation import (  # noqa: E402
-    AssistRouterConversationEntity,
-)
-
-
-class FakeVAEntry:
-    entry_id = "va-entry"
-    data = {"mic_device": "assist_satellite.kitchen"}
-    runtime_data = None
-
-
-class FakeConfigEntries:
-    def async_entries(self, domain):
-        return [FakeVAEntry()] if domain == "view_assist" else []
-
-
-class FakeServices:
-    def __init__(self):
-        self.calls = []
-
-    def has_service(self, domain, service):
-        return domain == "view_assist" and service in {"navigate", "set_state"}
-
-    async def async_call(
-        self,
-        domain,
-        service,
-        service_data=None,
-        blocking=False,
-        context=None,
+    profile = _PROFILE_DEFAULT
+    if re.search(
+        r"\b(?:latino|audio latino|doblad[oa] (?:al|en) latino)\b",
+        normalized,
     ):
-        self.calls.append(
-            {
-                "domain": domain,
-                "service": service,
-                "service_data": service_data,
-                "blocking": blocking,
-            }
-        )
+        profile = _PROFILE_LATIN
+    elif re.search(r"\b(?:f1|formula 1|deporte|deportes)\b", normalized):
+        profile = _PROFILE_SPORTS
 
+    disable_subtitles = bool(
+        re.search(r"\b(?:sin subtitulos|sin subtitulado|sin subtitular)\b", normalized)
+    ) or profile in {_PROFILE_LATIN, _PROFILE_SPORTS}
 
-class FakeState:
-    def __init__(self, attributes=None):
-        self.attributes = attributes or {}
-        self.name = "View Assist Kitchen"
+    season = _number_after(normalized, ("temporada",))
+    episode = _number_after(normalized, ("capitulo", "episodio"))
+    year = _extract_requested_year(normalized)
 
+    target_label, media_player = _resolve_target(
+        normalized,
+        aliases,
+        default_player=default_player,
+    )
 
-class FakeStates:
-    def get(self, entity_id):
-        if entity_id == "sensor.viewassist_kitchen":
-            return FakeState({
-                "dashboard": "/view-assist",
-                "mic_device": "assist_satellite.kitchen",
-                "mic_device_id": "device-kitchen",
-                "voice_device_id": "device-kitchen",
-            })
+    query = _extract_query(text, aliases)
+    if not query or not _query_has_content(query):
         return None
 
-
-class FakeHass:
-    def __init__(self):
-        self.tasks = []
-        self.services = FakeServices()
-        self.config_entries = FakeConfigEntries()
-        self.states = FakeStates()
-
-    def async_create_background_task(self, coroutine, name):
-        task = asyncio.create_task(coroutine, name=name)
-        self.tasks.append(task)
-        return task
-
-    def async_create_task(self, coroutine, name=None):
-        task = asyncio.create_task(coroutine, name=name)
-        self.tasks.append(task)
-        return task
-
-
-async def main():
-    hass = FakeHass()
-    router = AssistRouterConversationEntity(ConfigEntry())
-    router.hass = hass
-    router.entity_id = "conversation.assist_router"
-
-    # A personal/external task first goes through the fast general classifier.
-    openclaw_result = await router.async_process(
-        ConversationInput(
-            text="Revisame los correos",
-            device_id="device-kitchen",
-        )
+    return StremioRequest(
+        query=query,
+        media_type=media_type,
+        profile=profile,
+        season=season,
+        episode=episode,
+        year=year,
+        disable_subtitles=disable_subtitles,
+        media_player=media_player,
+        target_label=target_label,
+        strong=strong,
     )
-    assert router._extract_response_text(openclaw_result) == (
-        "Dejame trabajar en eso y te aviso por WhatsApp."
-    )
-    assert openclaw_result.conversation_id is None
-    assert openclaw_result.continue_conversation is False
-    assert CALLS[-1]["agent_id"] == "general"
-    assert "[[ASSIST_ROUTER:OPENCLAW]]" in str(
-        CALLS[-1]["extra_system_prompt"]
-    )
-    assert len(hass.tasks) == 2  # OpenClaw plus View Assist navigation.
-    await asyncio.gather(*hass.tasks)
-    assert CALLS[-1]["agent_id"] == "openclaw"
-    assert "enviá el resultado al usuario por WhatsApp" in CALLS[-1]["text"]
-    navigate_calls = [
-        call for call in hass.services.calls if call["service"] == "navigate"
+
+
+def parse_single_number(text: str) -> int | None:
+    """Return the first standalone spoken or numeric value."""
+    normalized = normalize_text(text)
+    for token in normalized.split():
+        value = _parse_number(token)
+        if value is not None:
+            return value
+    return None
+
+
+def parse_follow_up_episode(text: str) -> tuple[int | None, int | None]:
+    """Extract a season and episode from a follow-up answer."""
+    normalized = normalize_text(text)
+    season = _number_after(normalized, ("temporada",))
+    episode = _number_after(normalized, ("capitulo", "episodio"))
+
+    # A terse "dos, tres" means season 2, episode 3 when both are absent.
+    if season is None and episode is None:
+        values = [_parse_number(token) for token in normalized.split()]
+        numbers = [value for value in values if value is not None]
+        if len(numbers) >= 2:
+            return numbers[0], numbers[1]
+    return season, episode
+
+
+def select_result_from_follow_up(
+    text: str, results: list[dict[str, Any]]
+) -> dict[str, Any] | None:
+    """Select an ambiguous result by ordinal, year, type, or title."""
+    if not results:
+        return None
+    normalized = normalize_text(text)
+
+    ordinal = _ordinal_index(normalized)
+    if ordinal is not None and 0 <= ordinal < len(results):
+        return results[ordinal]
+
+    year = _extract_year(normalized)
+    if year is not None:
+        matching_year = [
+            item for item in results if _coerce_int(item.get("year")) == year
+        ]
+        if len(matching_year) == 1:
+            return matching_year[0]
+
+    requested_type: str | None = None
+    if "pelicula" in normalized:
+        requested_type = "movie"
+    elif "serie" in normalized:
+        requested_type = "series"
+    if requested_type:
+        matching_type = [
+            item for item in results if str(item.get("media_type")) == requested_type
+        ]
+        if len(matching_type) == 1:
+            return matching_type[0]
+
+    exact_title = [
+        item
+        for item in results
+        if normalize_text(str(item.get("title") or "")) == normalized
     ]
-    set_state_calls = [
-        call for call in hass.services.calls if call["service"] == "set_state"
+    if len(exact_title) == 1:
+        return exact_title[0]
+
+    contained = [
+        item
+        for item in results
+        if normalize_text(str(item.get("title") or ""))
+        and normalize_text(str(item.get("title") or "")) in normalized
     ]
-    assert navigate_calls[-2]["service_data"]["path"] == "/view-assist/info"
-    assert navigate_calls[-2]["service_data"]["device"] == (
-        "sensor.viewassist_kitchen"
-    )
-    assert navigate_calls[-1]["service_data"]["path"] == "home"
-    assert set_state_calls[-1]["service_data"]["message"] == ""
+    if len(contained) == 1:
+        return contained[0]
+    return None
 
-    # The acknowledgement can never re-enter the router.
-    previous_call_count = len(CALLS)
-    previous_task_count = len(hass.tasks)
-    echo_result = await router.async_process(
-        ConversationInput(
-            text="¡Dejame trabajar en eso y te aviso por WhatsApp!",
-            conversation_id="self-echo",
-            device_id="device-kitchen",
+
+def describe_results(results: list[dict[str, Any]], limit: int = 4) -> str:
+    """Create a compact voice-friendly ambiguity prompt."""
+    choices: list[str] = []
+    for index, item in enumerate(results[:limit], start=1):
+        title = str(item.get("title") or item.get("media_id") or "resultado")
+        year = _coerce_int(item.get("year"))
+        media_type = str(item.get("media_type") or "")
+        type_label = "serie" if media_type == "series" else "película"
+        suffix = f", {year}" if year else ""
+        choices.append(f"{index}: {title}{suffix}, {type_label}")
+    return "; ".join(choices)
+
+
+def selected_title(selected: dict[str, Any]) -> str:
+    """Return a useful display title for a movie or episode."""
+    series_title = str(selected.get("series_title") or "").strip()
+    title = str(
+        selected.get("title") or selected.get("media_id") or "contenido"
+    ).strip()
+    season = _coerce_int(selected.get("season"))
+    episode = _coerce_int(selected.get("episode"))
+    if series_title and season is not None and episode is not None:
+        return f"{series_title}, temporada {season}, capítulo {episode}: {title}"
+    return title
+
+
+
+def _query_has_content(query: str) -> bool:
+    """Reject commands that only name the TV and contain no media title."""
+    tokens = set(normalize_text(query).split())
+    filler = {
+        "a",
+        "al",
+        "android",
+        "el",
+        "en",
+        "la",
+        "las",
+        "los",
+        "tele",
+        "televisor",
+        "tv",
+        "un",
+        "una",
+    }
+    return bool(tokens - filler)
+
+def _resolve_target(
+    normalized_text: str,
+    aliases: dict[str, str],
+    *,
+    default_player: str | None,
+) -> tuple[str | None, str | None]:
+    alias = _find_target_alias(normalized_text, aliases)
+    if alias is not None:
+        return alias, aliases[alias]
+    if _TV_MARKER_RE.search(normalized_text):
+        return "tele", default_player or None
+    return None, default_player or None
+
+
+def _find_target_alias(
+    normalized_text: str, aliases: dict[str, str]
+) -> str | None:
+    """Find a configured room/TV alias only in a target-like phrase."""
+    for alias in sorted(aliases, key=len, reverse=True):
+        escaped = re.escape(alias)
+        patterns = (
+            rf"\b(?:tele|televisor|tv|android tv)\s+(?:de|del|de la)\s+{escaped}\b",
+            rf"\ben\s+(?:el|la)?\s*{escaped}\s*$",
         )
-    )
-    assert router._extract_response_text(echo_result) == ""
-    assert echo_result.conversation_id is None
-    assert echo_result.continue_conversation is False
-    assert len(CALLS) == previous_call_count
-    assert len(hass.tasks) == previous_task_count
+        if any(re.search(pattern, normalized_text) for pattern in patterns):
+            return alias
+    return None
 
-    # A general question is answered by the fast agent without OpenClaw.
-    previous_task_count = len(hass.tasks)
-    recipe_result = await router.async_process(
-        ConversationInput(
-            text="¿Cómo hago una salsa blanca?",
-            device_id="device-kitchen",
+
+def _extract_query(text: str, aliases: dict[str, str]) -> str:
+    query = _PLAY_PREFIX_RE.sub("", text, count=1)
+    cleanup_patterns = (
+        r"\b(?:en|por)\s+stremio\b",
+        r"\bstremio\b",
+        r"\b(?:la|una)\s+pel[ií]cula\s+(?:de|llamada)?\s*",
+        r"\b(?:la|una)\s+serie\s+(?:de|llamada)?\s*",
+        r"\bpel[ií]cula\b",
+        r"\bserie\b",
+        r"\b(?:en|con\s+audio|doblad[oa]\s+(?:al|en))\s+latino\b",
+        r"\b(?:con|sin)\s+subt[ií]tulos?\b",
+        r"\bsubtitulad[oa]s?\b",
+        r"\ben\s+(?:la\s+)?(?:tele|tv|televisor|android\s*tv)\b.*$",
+        r"\b(?:tele|tv|televisor|android\s*tv)\s+(?:del?|de\s+la)\s+[^,.;!?]+$",
+    )
+    for pattern in cleanup_patterns:
+        query = re.sub(pattern, " ", query, flags=re.IGNORECASE)
+    query = _remove_labeled_numbers(query)
+    # "Dune de 2021" uses the year as a discriminator, not as title text.
+    query = re.sub(
+        r"\b(?:de|del\s+año|del\s+ano|año|ano|versi[oó]n(?:\s+de)?)\s+"
+        r"(?:19\d{2}|20\d{2})\b",
+        " ",
+        query,
+        flags=re.IGNORECASE,
+    )
+    for alias in sorted(aliases, key=len, reverse=True):
+        query = re.sub(
+            rf"\b(?:en\s+(?:el|la)\s+|(?:de|del|de la)\s+){re.escape(alias)}\s*$",
+            " ",
+            query,
+            flags=re.IGNORECASE,
         )
+    query = re.sub(
+        r"\b(?:del?|en)\s+(?:el|la)\s+(?:living|dormitorio|pieza|sala)\b.*$",
+        " ",
+        query,
+        flags=re.IGNORECASE,
     )
-    assert router._extract_response_text(recipe_result).startswith(
-        "Para una salsa blanca"
-    )
-    assert recipe_result.conversation_id is not None
-    assert recipe_result.continue_conversation is True
-    assert CALLS[-1]["agent_id"] == "general"
-    recipe_tasks = hass.tasks[previous_task_count:]
-    await asyncio.gather(*recipe_tasks)
-
-    # An explicit phrase bypasses the classifier and starts OpenClaw directly.
-    previous_call_count = len(CALLS)
-    previous_task_count = len(hass.tasks)
-    explicit_result = await router.async_process(
-        ConversationInput(
-            text="Usá OpenClaw para revisar este asunto",
-            device_id="device-kitchen",
-        )
-    )
-    assert router._extract_response_text(explicit_result).startswith(
-        "Dejame trabajar"
-    )
-    explicit_tasks = hass.tasks[previous_task_count:]
-    await asyncio.gather(*explicit_tasks)
-    explicit_calls = CALLS[previous_call_count:]
-    assert [call["agent_id"] for call in explicit_calls] == ["openclaw"]
-
-    # Domotics keeps the deterministic keyword route.
-    previous_task_count = len(hass.tasks)
-    domotics_result = await router.async_process(
-        ConversationInput(
-            text="Prendé la luz",
-            device_id="device-kitchen",
-        )
-    )
-    assert router._extract_response_text(domotics_result) == (
-        "La luz del living quedó encendida"
-    )
-    assert CALLS[-1]["agent_id"] == "gemini"
-    assert domotics_result.continue_conversation is True
-
-    new_tasks = hass.tasks[previous_task_count:]
-    await asyncio.gather(*new_tasks)
-    domotics_navigate_calls = [
-        call for call in hass.services.calls if call["service"] == "navigate"
-    ]
-    assert domotics_navigate_calls[-2]["service_data"]["path"] == (
-        "/view-assist/intent"
-    )
-    assert domotics_navigate_calls[-2]["service_data"]["revert_timeout"] == 0
-    assert domotics_navigate_calls[-1]["service_data"]["path"] == "home"
-    domotics_set_state_calls = [
-        call for call in hass.services.calls if call["service"] == "set_state"
-    ]
-    assert any(
-        call["service_data"].get("message")
-        == "La luz del living quedó encendida"
-        for call in domotics_set_state_calls
-    )
-
-    # A new turn cancels the previous delayed return-to-home action.
-    home_count_before = sum(
-        1
-        for call in hass.services.calls
-        if call["service"] == "navigate"
-        and call["service_data"].get("path") == "home"
-    )
-    first_task_start = len(hass.tasks)
-    await router.async_process(
-        ConversationInput(text="Prendé la luz", device_id="device-kitchen")
-    )
-    await asyncio.sleep(0.1)
-    await router.async_process(
-        ConversationInput(text="Apagá la luz", device_id="device-kitchen")
-    )
-    overlapping_tasks = hass.tasks[first_task_start:]
-    await asyncio.gather(*overlapping_tasks)
-    home_count_after = sum(
-        1
-        for call in hass.services.calls
-        if call["service"] == "navigate"
-        and call["service_data"].get("path") == "home"
-    )
-    assert home_count_after - home_count_before == 1
-
-    # Closing phrases still terminate without contacting any destination.
-    previous_call_count = len(CALLS)
-    previous_task_count = len(hass.tasks)
-    closing_result = await router.async_process(
-        ConversationInput(
-            text="¡Gracias!",
-            conversation_id="conversation-follow-up",
-            device_id="device-kitchen",
-        )
-    )
-    assert router._extract_response_text(closing_result) == "Hasta luego."
-    assert closing_result.conversation_id is None
-    assert closing_result.continue_conversation is False
-    assert len(CALLS) == previous_call_count
-    closing_tasks = hass.tasks[previous_task_count:]
-    await asyncio.gather(*closing_tasks)
-    assert hass.services.calls[-1]["service_data"]["path"] == "home"
-
-    print("Three-agent routing and View Assist smoke tests: OK")
+    query = query.strip(" \t\r\n,.;:!?¿¡\"'")
+    query = re.sub(r"\s+", " ", query)
+    return query
 
 
-asyncio.run(main())
+
+def _remove_labeled_numbers(value: str) -> str:
+    """Remove valid season/episode phrases without eating ordinary words."""
+    label = r"(?:temporada|cap[ií]tulo|episodio)"
+    token = r"(?:\d+|[a-záéíóúñ]+)"
+
+    def replace_if_number(match: re.Match[str]) -> str:
+        spoken = normalize_text(match.group("number"))
+        return " " if _parse_number(spoken) is not None else match.group(0)
+
+    value = re.sub(
+        rf"\b(?P<number>{token})\s+{label}\b",
+        replace_if_number,
+        value,
+        flags=re.IGNORECASE,
+    )
+    return re.sub(
+        rf"\b{label}\s+(?P<number>{token})\b",
+        replace_if_number,
+        value,
+        flags=re.IGNORECASE,
+    )
+
+def _number_after(normalized: str, labels: tuple[str, ...]) -> int | None:
+    """Return the number belonging to a season/episode label."""
+    tokens = normalized.split()
+    label_set = set(labels)
+    all_labels = {"temporada", "capitulo", "episodio"}
+    for index, token in enumerate(tokens):
+        if token not in label_set:
+            continue
+        before = _parse_number(tokens[index - 1]) if index > 0 else None
+        after = _parse_number(tokens[index + 1]) if index + 1 < len(tokens) else None
+        if before is not None and after is not None:
+            before_is_previous_label_value = (
+                index >= 2 and tokens[index - 2] in all_labels
+            )
+            after_is_next_label_value = (
+                index + 2 < len(tokens) and tokens[index + 2] in all_labels
+            )
+            if before_is_previous_label_value and not after_is_next_label_value:
+                return after
+            if after_is_next_label_value and not before_is_previous_label_value:
+                return before
+            return after
+        if after is not None:
+            return after
+        if before is not None:
+            return before
+    return None
+
+
+def _parse_number(value: str) -> int | None:
+    if value.isdigit():
+        return int(value)
+    return _NUMBER_WORDS.get(value)
+
+
+
+def _extract_requested_year(normalized: str) -> int | None:
+    """Extract a release year only when the user marks it as a discriminator."""
+    match = re.search(
+        r"\b(?:de|del año|del ano|año|ano|version|version de)\s+"
+        r"(19\d{2}|20\d{2})\b",
+        normalized,
+    )
+    return int(match.group(1)) if match else None
+
+def _extract_year(normalized: str) -> int | None:
+    match = re.search(r"\b(19\d{2}|20\d{2})\b", normalized)
+    return int(match.group(1)) if match else None
+
+
+def _ordinal_index(normalized: str) -> int | None:
+    for token in normalized.split():
+        value = _parse_number(token)
+        if value is not None and 1 <= value <= 10:
+            return value - 1
+    return None
+
+
+def _coerce_int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None

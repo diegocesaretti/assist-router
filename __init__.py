@@ -71,6 +71,32 @@
           "general_router_instruction": "The general agent answers recipes, general knowledge, explanations, and simple requests. It routes only when these criteria require tools or long-running work.",
           "force_openclaw_phrases": "One phrase per line. A phrase may appear inside a longer request and will start OpenClaw directly."
         }
+      },
+      "stremio": {
+        "title": "Stremio and TVs",
+        "description": "Configure the local skill that searches movies and series through Stremio Stream Bridge before sending the request to an agent.",
+        "data": {
+          "stremio_enabled": "Enable Stremio commands",
+          "stremio_entry_id": "Stremio Stream Bridge entry",
+          "stremio_default_player": "Optional default TV",
+          "stremio_tv_aliases": "TV aliases",
+          "stremio_result_limit": "Maximum choices when asking",
+          "stremio_pending_timeout": "Seconds to answer a choice",
+          "stremio_play_ack": "Playback acknowledgement",
+          "stremio_view_enabled": "Show a Stremio view",
+          "stremio_view_path": "Stremio view"
+        },
+        "data_description": {
+          "stremio_enabled": "Detects requests such as ‘Play Matrix on the TV’ before the domotics filter.",
+          "stremio_entry_id": "Automatic works with one loaded entry. Select an entry when more than one exists.",
+          "stremio_default_player": "media_player entity. Leave empty to use Stream Bridge’s configured default.",
+          "stremio_tv_aliases": "One TV per line. Format: living, lounge = media_player.tv_living",
+          "stremio_result_limit": "Maximum titles spoken and displayed when a search is ambiguous.",
+          "stremio_pending_timeout": "How long the router accepts replies such as ‘the second one’ or season and episode.",
+          "stremio_play_ack": "Supports {title} and {target}. Example: Preparing {title} on {target}.",
+          "stremio_view_enabled": "Displays poster, status, and alternatives in View Assist.",
+          "stremio_view_path": "Use infopic, info, stremio, or an absolute dashboard path."
+        }
       }
     },
     "error": {
@@ -86,7 +112,11 @@
       "end_phrases_required": "Enter at least one phrase that closes the conversation.",
       "general_openclaw_must_differ": "The general agent cannot be the same as the OpenClaw agent.",
       "general_instruction_required": "Enter criteria that tell the general agent when to route to OpenClaw.",
-      "response_max_before_min": "Maximum time must be equal to or greater than minimum time."
+      "response_max_before_min": "Maximum time must be equal to or greater than minimum time.",
+      "invalid_media_player": "The entity must start with media_player. or be left empty.",
+      "invalid_tv_aliases": "Use one TV per line with the format alias = media_player.entity.",
+      "stremio_ack_required": "Enter a playback acknowledgement.",
+      "invalid_stremio_ack_template": "Use only {title} and {target} in the playback acknowledgement."
     },
     "abort": {
       "already_configured": "Assist Router is already configured."
@@ -110,7 +140,8 @@
           "view_music": "Music and media",
           "view_list": "Lists and tasks",
           "view_sports": "Sports",
-          "view_domotics": "General home control"
+          "view_domotics": "General home control",
+          "stremio": "Stremio and TVs"
         }
       },
       "routing": {
@@ -414,6 +445,40 @@
           "view_domotics_path": "Use a relative view name or a full path starting with /.",
           "view_domotics_keywords": "One word per line. The response is checked first and the original request is used as fallback."
         }
+      },
+      "stremio": {
+        "title": "Stremio and TVs",
+        "description": "Edit this section or return to the main menu.",
+        "menu_options": {
+          "edit_stremio": "Edit settings",
+          "init": "← Back"
+        }
+      },
+      "edit_stremio": {
+        "title": "Stremio and TVs",
+        "description": "Configure the local skill that searches movies and series through Stremio Stream Bridge before sending the request to an agent.",
+        "data": {
+          "stremio_enabled": "Enable Stremio commands",
+          "stremio_entry_id": "Stremio Stream Bridge entry",
+          "stremio_default_player": "Optional default TV",
+          "stremio_tv_aliases": "TV aliases",
+          "stremio_result_limit": "Maximum choices when asking",
+          "stremio_pending_timeout": "Seconds to answer a choice",
+          "stremio_play_ack": "Playback acknowledgement",
+          "stremio_view_enabled": "Show a Stremio view",
+          "stremio_view_path": "Stremio view"
+        },
+        "data_description": {
+          "stremio_enabled": "Detects requests such as ‘Play Matrix on the TV’ before the domotics filter.",
+          "stremio_entry_id": "Automatic works with one loaded entry. Select an entry when more than one exists.",
+          "stremio_default_player": "media_player entity. Leave empty to use Stream Bridge’s configured default.",
+          "stremio_tv_aliases": "One TV per line. Format: living, lounge = media_player.tv_living",
+          "stremio_result_limit": "Maximum titles spoken and displayed when a search is ambiguous.",
+          "stremio_pending_timeout": "How long the router accepts replies such as ‘the second one’ or season and episode.",
+          "stremio_play_ack": "Supports {title} and {target}. Example: Preparing {title} on {target}.",
+          "stremio_view_enabled": "Displays poster, status, and alternatives in View Assist.",
+          "stremio_view_path": "Use infopic, info, stremio, or an absolute dashboard path."
+        }
       }
     },
     "error": {
@@ -428,7 +493,11 @@
       "not_enough_agents": "At least three conversation agents must be loaded. Configure domotics, a general agent, and OpenClaw, restart Home Assistant, and try again.",
       "general_openclaw_must_differ": "The general agent cannot be the same as the OpenClaw agent.",
       "general_instruction_required": "Enter criteria that tell the general agent when to route to OpenClaw.",
-      "response_max_before_min": "Maximum time must be equal to or greater than minimum time."
+      "response_max_before_min": "Maximum time must be equal to or greater than minimum time.",
+      "invalid_media_player": "The entity must start with media_player. or be left empty.",
+      "invalid_tv_aliases": "Use one TV per line with the format alias = media_player.entity.",
+      "stremio_ack_required": "Enter a playback acknowledgement.",
+      "invalid_stremio_ack_template": "Use only {title} and {target} in the playback acknowledgement."
     }
   }
 }
