@@ -1,0 +1,503 @@
+{
+  "title": "Assist Router",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Three agents and domotics filter",
+        "description": "Choose the domotics agent, the fast general agent, and OpenClaw. Keywords keep home-control requests on the fastest deterministic route.",
+        "data": {
+          "domotics_agent": "Domotics agent",
+          "general_agent": "General agent and classifier",
+          "openclaw_agent": "OpenClaw agent",
+          "keywords": "Domotics keywords"
+        },
+        "data_description": {
+          "domotics_agent": "Immediately processes utterances containing a configured keyword.",
+          "general_agent": "Answers general questions and decides whether a request truly needs OpenClaw.",
+          "openclaw_agent": "Runs in the background and delivers results through WhatsApp when classification requests it.",
+          "keywords": "One word per line. Matching uses complete words and ignores case and accents."
+        }
+      },
+      "openclaw": {
+        "title": "OpenClaw behavior",
+        "description": "Configure the immediate reply, delivery instruction, and processing view.",
+        "data": {
+          "openclaw_ack_message": "Immediate acknowledgement",
+          "openclaw_background_instruction": "Instruction appended to the request",
+          "view_openclaw_enabled": "Open a processing view",
+          "view_openclaw_path": "OpenClaw view"
+        },
+        "data_description": {
+          "openclaw_ack_message": "Spoken without waiting for OpenClaw.",
+          "openclaw_background_instruction": "Appended to the background request.",
+          "view_openclaw_enabled": "Disable if the view is not installed.",
+          "view_openclaw_path": "Use a relative name such as info or a full path."
+        }
+      },
+      "view_assist": {
+        "title": "View Assist general settings",
+        "description": "Written-response time is calculated automatically from the word count, then the related view opens.",
+        "data": {
+          "view_assist_enabled": "Enable View Assist navigation",
+          "view_assist_entity": "View Assist satellite",
+          "view_response_enabled": "Show written response",
+          "view_response_path": "Response display view",
+          "view_related_display_time": "Related view seconds",
+          "view_navigation_delay": "Delay before opening the view",
+          "view_response_min_time": "Minimum written-response time",
+          "view_response_seconds_per_word": "Seconds per word",
+          "view_response_max_time": "Maximum written-response time"
+        },
+        "data_description": {
+          "view_assist_enabled": "Open a view related to the final answer.",
+          "view_assist_entity": "Automatic uses the satellite that originated the conversation.",
+          "view_response_enabled": "Shows the agent response as text before opening the category view.",
+          "view_response_path": "Use a relative name such as 'info' or a full path.",
+          "view_related_display_time": "Follow-up listening window while the weather, camera, thermostat, domotics, or other related view is visible. It then returns explicitly to home. Recommended: 5 seconds. Use 0 to keep the view open.",
+          "view_navigation_delay": "Initial delay so View Assist can finish the pipeline state transition. Recommended: 0.8 seconds.",
+          "view_response_min_time": "Short replies are never shown for less than this time. Recommended: 3 seconds.",
+          "view_response_seconds_per_word": "Controls how display time grows with reply length. Recommended: 0.35 seconds per word.",
+          "view_response_max_time": "Prevents very long replies from remaining too long. Recommended: 20 seconds."
+        }
+      },
+      "general": {
+        "title": "General-agent classifier",
+        "description": "The internal routing protocol is fixed. Configure the situations that require OpenClaw and phrases that bypass classification.",
+        "data": {
+          "general_router_instruction": "Criteria for routing to OpenClaw",
+          "force_openclaw_phrases": "Phrases that force OpenClaw"
+        },
+        "data_description": {
+          "general_router_instruction": "The general agent answers recipes, general knowledge, explanations, and simple requests. It routes only when these criteria require tools or long-running work.",
+          "force_openclaw_phrases": "One phrase per line. A phrase may appear inside a longer request and will start OpenClaw directly."
+        }
+      },
+      "stremio": {
+        "title": "Stremio and TVs",
+        "description": "Configure the local skill that searches movies and series through Stremio Stream Bridge before sending the request to an agent.",
+        "data": {
+          "stremio_enabled": "Enable Stremio commands",
+          "stremio_entry_id": "Stremio Stream Bridge entry",
+          "stremio_default_player": "Optional default TV",
+          "stremio_tv_aliases": "TV aliases",
+          "stremio_result_limit": "Maximum choices when asking",
+          "stremio_pending_timeout": "Seconds to answer a choice",
+          "stremio_play_ack": "Playback acknowledgement",
+          "stremio_view_enabled": "Show a Stremio view",
+          "stremio_view_path": "Stremio view"
+        },
+        "data_description": {
+          "stremio_enabled": "Detects requests such as ‘Play Matrix on the TV’ before the domotics filter.",
+          "stremio_entry_id": "Automatic works with one loaded entry. Select an entry when more than one exists.",
+          "stremio_default_player": "media_player entity. Leave empty to use Stream Bridge’s configured default.",
+          "stremio_tv_aliases": "One TV per line. Format: living, lounge = media_player.tv_living",
+          "stremio_result_limit": "Maximum titles spoken and displayed when a search is ambiguous.",
+          "stremio_pending_timeout": "How long the router accepts replies such as ‘the second one’ or season and episode.",
+          "stremio_play_ack": "Supports {title} and {target}. Example: Preparing {title} on {target}.",
+          "stremio_view_enabled": "Displays poster, status, and alternatives in View Assist.",
+          "stremio_view_path": "Use infopic, info, stremio, or an absolute dashboard path."
+        }
+      }
+    },
+    "error": {
+      "agents_must_differ": "All three destinations must use different agents.",
+      "agent_not_found": "The selected agent is no longer available.",
+      "recursive_agent": "Assist Router cannot select itself as a destination.",
+      "keywords_required": "Enter at least one home automation keyword.",
+      "ack_message_required": "Enter an immediate OpenClaw acknowledgement.",
+      "background_instruction_required": "Enter the delivery instruction for OpenClaw.",
+      "invalid_view_path": "Use a simple name such as weather or a full path starting with /. Do not use spaces.",
+      "view_keywords_required": "Enter at least one keyword for this view or disable it.",
+      "not_enough_agents": "At least three conversation agents must be loaded. Configure domotics, a general agent, and OpenClaw, restart Home Assistant, and try again.",
+      "end_phrases_required": "Enter at least one phrase that closes the conversation.",
+      "general_openclaw_must_differ": "The general agent cannot be the same as the OpenClaw agent.",
+      "general_instruction_required": "Enter criteria that tell the general agent when to route to OpenClaw.",
+      "response_max_before_min": "Maximum time must be equal to or greater than minimum time.",
+      "invalid_media_player": "The entity must start with media_player. or be left empty.",
+      "invalid_tv_aliases": "Use one TV per line with the format alias = media_player.entity.",
+      "stremio_ack_required": "Enter a playback acknowledgement.",
+      "invalid_stremio_ack_template": "Use only {title} and {target} in the playback acknowledgement."
+    },
+    "abort": {
+      "already_configured": "Assist Router is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Configure Assist Router",
+        "description": "Choose the section to edit. Each view has its own page.",
+        "menu_options": {
+          "routing": "Agents and main filter",
+          "general": "General-agent classifier",
+          "conversation": "Conversation ending",
+          "openclaw": "OpenClaw",
+          "view_assist": "View Assist: general settings",
+          "view_weather": "Weather and forecast",
+          "view_climate": "Climate control",
+          "view_camera": "Cameras",
+          "view_alarm": "Alarms and reminders",
+          "view_music": "Music and media",
+          "view_list": "Lists and tasks",
+          "view_sports": "Sports",
+          "view_domotics": "General home control",
+          "stremio": "Stremio and TVs"
+        }
+      },
+      "routing": {
+        "title": "Three agents and domotics filter",
+        "description": "Choose to edit this section or return to the main menu.",
+        "menu_options": {
+          "edit_routing": "Edit settings",
+          "init": "← Back"
+        }
+      },
+      "openclaw": {
+        "title": "OpenClaw",
+        "description": "Choose to edit this section or return to the main menu.",
+        "menu_options": {
+          "edit_openclaw": "Edit settings",
+          "init": "← Back"
+        }
+      },
+      "view_assist": {
+        "title": "View Assist: general settings",
+        "description": "Choose to edit this section or return to the main menu.",
+        "menu_options": {
+          "edit_view_assist": "Edit settings",
+          "init": "← Back"
+        }
+      },
+      "view_weather": {
+        "title": "Weather and forecast",
+        "description": "Choose to edit this view or return to the main menu.",
+        "menu_options": {
+          "edit_view_weather": "Edit view",
+          "init": "← Back"
+        }
+      },
+      "view_climate": {
+        "title": "Climate control",
+        "description": "Choose to edit this view or return to the main menu.",
+        "menu_options": {
+          "edit_view_climate": "Edit view",
+          "init": "← Back"
+        }
+      },
+      "view_camera": {
+        "title": "Cameras",
+        "description": "Choose to edit this view or return to the main menu.",
+        "menu_options": {
+          "edit_view_camera": "Edit view",
+          "init": "← Back"
+        }
+      },
+      "view_alarm": {
+        "title": "Alarms and reminders",
+        "description": "Choose to edit this view or return to the main menu.",
+        "menu_options": {
+          "edit_view_alarm": "Edit view",
+          "init": "← Back"
+        }
+      },
+      "view_music": {
+        "title": "Music and media",
+        "description": "Choose to edit this view or return to the main menu.",
+        "menu_options": {
+          "edit_view_music": "Edit view",
+          "init": "← Back"
+        }
+      },
+      "view_list": {
+        "title": "Lists and tasks",
+        "description": "Choose to edit this view or return to the main menu.",
+        "menu_options": {
+          "edit_view_list": "Edit view",
+          "init": "← Back"
+        }
+      },
+      "view_sports": {
+        "title": "Sports",
+        "description": "Choose to edit this view or return to the main menu.",
+        "menu_options": {
+          "edit_view_sports": "Edit view",
+          "init": "← Back"
+        }
+      },
+      "view_domotics": {
+        "title": "General home control",
+        "description": "Choose to edit this view or return to the main menu.",
+        "menu_options": {
+          "edit_view_domotics": "Edit view",
+          "init": "← Back"
+        }
+      },
+      "conversation": {
+        "title": "Conversation ending",
+        "description": "Choose to edit this section or return to the main menu.",
+        "menu_options": {
+          "edit_conversation": "Edit settings",
+          "init": "← Back"
+        }
+      },
+      "general": {
+        "title": "General-agent classifier",
+        "description": "Choose to edit this section or return to the main menu.",
+        "menu_options": {
+          "edit_general": "Edit settings",
+          "init": "← Back"
+        }
+      },
+      "edit_routing": {
+        "title": "Three agents and domotics filter",
+        "description": "Keywords keep domotics on the fast route. Everything else goes to the general agent first.",
+        "data": {
+          "domotics_agent": "Domotics agent",
+          "general_agent": "General agent and classifier",
+          "openclaw_agent": "OpenClaw agent",
+          "keywords": "Domotics keywords"
+        },
+        "data_description": {
+          "domotics_agent": "Immediate destination when STT contains a configured keyword.",
+          "general_agent": "Answers normal questions and may authorize an OpenClaw task.",
+          "openclaw_agent": "Runs only for an explicit phrase or when the general agent emits the private routing marker.",
+          "keywords": "One word per line. Matching ignores accents and case."
+        }
+      },
+      "edit_general": {
+        "title": "General-agent classifier",
+        "description": "Adjust routing criteria without changing the router’s technical protocol.",
+        "data": {
+          "general_router_instruction": "Criteria for routing to OpenClaw",
+          "force_openclaw_phrases": "Phrases that force OpenClaw"
+        },
+        "data_description": {
+          "general_router_instruction": "Describe requests that need email, files, the PC, WhatsApp, external accounts, or long-running work. When uncertain, the general agent should answer itself.",
+          "force_openclaw_phrases": "One phrase per line. Matching ignores accents and case and may occur inside a sentence."
+        }
+      },
+      "edit_conversation": {
+        "title": "Conversation ending",
+        "description": "These phrases end a follow-up conversation without being sent to Gemini or OpenClaw.",
+        "data": {
+          "end_phrases": "Closing phrases",
+          "end_response": "Closing response",
+          "end_view_home": "Return to the home view",
+          "follow_up_enabled": "Wait for a follow-up response"
+        },
+        "data_description": {
+          "end_phrases": "One phrase per line. The whole utterance is matched while ignoring case, accents, and punctuation.",
+          "end_response": "May be left blank to end without spoken feedback.",
+          "end_view_home": "Open the home screen on the same View Assist satellite when closing.",
+          "follow_up_enabled": "After a normal response, Home Assistant listens for another utterance. Closing phrases end the session, while OpenClaw always remains asynchronous."
+        }
+      },
+      "edit_openclaw": {
+        "title": "OpenClaw",
+        "description": "Immediate reply, delivery instruction, and processing view.",
+        "data": {
+          "openclaw_ack_message": "Immediate acknowledgement",
+          "openclaw_background_instruction": "Instruction appended to request",
+          "view_openclaw_enabled": "Open processing view",
+          "view_openclaw_path": "Processing view path"
+        },
+        "data_description": {
+          "openclaw_ack_message": "Spoken immediately.",
+          "openclaw_background_instruction": "Added to the request sent to OpenClaw.",
+          "view_openclaw_enabled": "Disable if the view does not exist.",
+          "view_openclaw_path": "Relative name or full path."
+        }
+      },
+      "edit_view_assist": {
+        "title": "View Assist: general settings",
+        "description": "Written-response time is calculated automatically from the word count, then the related view opens.",
+        "data": {
+          "view_assist_enabled": "Enable View Assist navigation",
+          "view_assist_entity": "View Assist satellite",
+          "view_response_enabled": "Show written response",
+          "view_response_path": "Response display view",
+          "view_related_display_time": "Related view seconds",
+          "view_navigation_delay": "Delay before opening the view",
+          "view_response_min_time": "Minimum written-response time",
+          "view_response_seconds_per_word": "Seconds per word",
+          "view_response_max_time": "Maximum written-response time"
+        },
+        "data_description": {
+          "view_assist_enabled": "Disable to keep spoken responses only.",
+          "view_assist_entity": "Automatic uses the originating satellite.",
+          "view_response_enabled": "Shows the agent response as text before opening the category view.",
+          "view_response_path": "Use a relative name such as 'info' or a full path.",
+          "view_related_display_time": "Follow-up listening window while the weather, camera, thermostat, domotics, or other related view is visible. It then returns explicitly to home. Recommended: 5 seconds. Use 0 to keep the view open.",
+          "view_navigation_delay": "Initial delay so View Assist can finish the pipeline state transition. Recommended: 0.8 seconds.",
+          "view_response_min_time": "Short replies are never shown for less than this time. Recommended: 3 seconds.",
+          "view_response_seconds_per_word": "Controls how display time grows with reply length. Recommended: 0.35 seconds per word.",
+          "view_response_max_time": "Prevents very long replies from remaining too long. Recommended: 20 seconds."
+        }
+      },
+      "edit_view_weather": {
+        "title": "Weather and forecast",
+        "description": "Configure only the weather and forecast view.",
+        "data": {
+          "view_weather_enabled": "Open weather and forecast view",
+          "view_weather_path": "Weather and forecast view path",
+          "view_weather_keywords": "Weather and forecast keywords"
+        },
+        "data_description": {
+          "view_weather_enabled": "Disable if this view is not installed.",
+          "view_weather_path": "Use a relative view name or a full path starting with /.",
+          "view_weather_keywords": "One word per line. The response is checked first and the original request is used as fallback."
+        }
+      },
+      "edit_view_climate": {
+        "title": "Climate control",
+        "description": "Configure only the climate control view.",
+        "data": {
+          "view_climate_enabled": "Open climate control view",
+          "view_climate_path": "Climate control view path",
+          "view_climate_keywords": "Climate control keywords"
+        },
+        "data_description": {
+          "view_climate_enabled": "Disable if this view is not installed.",
+          "view_climate_path": "Use a relative view name or a full path starting with /.",
+          "view_climate_keywords": "One word per line. The response is checked first and the original request is used as fallback."
+        }
+      },
+      "edit_view_camera": {
+        "title": "Cameras",
+        "description": "Configure only the cameras view.",
+        "data": {
+          "view_camera_enabled": "Open cameras view",
+          "view_camera_path": "Cameras view path",
+          "view_camera_keywords": "Cameras keywords"
+        },
+        "data_description": {
+          "view_camera_enabled": "Disable if this view is not installed.",
+          "view_camera_path": "Use a relative view name or a full path starting with /.",
+          "view_camera_keywords": "One word per line. The response is checked first and the original request is used as fallback."
+        }
+      },
+      "edit_view_alarm": {
+        "title": "Alarms and reminders",
+        "description": "Configure only the alarms and reminders view.",
+        "data": {
+          "view_alarm_enabled": "Open alarms and reminders view",
+          "view_alarm_path": "Alarms and reminders view path",
+          "view_alarm_keywords": "Alarms and reminders keywords"
+        },
+        "data_description": {
+          "view_alarm_enabled": "Disable if this view is not installed.",
+          "view_alarm_path": "Use a relative view name or a full path starting with /.",
+          "view_alarm_keywords": "One word per line. The response is checked first and the original request is used as fallback."
+        }
+      },
+      "edit_view_music": {
+        "title": "Music and media",
+        "description": "Configure only the music and media view.",
+        "data": {
+          "view_music_enabled": "Open music and media view",
+          "view_music_path": "Music and media view path",
+          "view_music_keywords": "Music and media keywords"
+        },
+        "data_description": {
+          "view_music_enabled": "Disable if this view is not installed.",
+          "view_music_path": "Use a relative view name or a full path starting with /.",
+          "view_music_keywords": "One word per line. The response is checked first and the original request is used as fallback."
+        }
+      },
+      "edit_view_list": {
+        "title": "Lists and tasks",
+        "description": "Configure only the lists and tasks view.",
+        "data": {
+          "view_list_enabled": "Open lists and tasks view",
+          "view_list_path": "Lists and tasks view path",
+          "view_list_keywords": "Lists and tasks keywords"
+        },
+        "data_description": {
+          "view_list_enabled": "Disable if this view is not installed.",
+          "view_list_path": "Use a relative view name or a full path starting with /.",
+          "view_list_keywords": "One word per line. The response is checked first and the original request is used as fallback."
+        }
+      },
+      "edit_view_sports": {
+        "title": "Sports",
+        "description": "Configure only the sports view.",
+        "data": {
+          "view_sports_enabled": "Open sports view",
+          "view_sports_path": "Sports view path",
+          "view_sports_keywords": "Sports keywords"
+        },
+        "data_description": {
+          "view_sports_enabled": "Disable if this view is not installed.",
+          "view_sports_path": "Use a relative view name or a full path starting with /.",
+          "view_sports_keywords": "One word per line. The response is checked first and the original request is used as fallback."
+        }
+      },
+      "edit_view_domotics": {
+        "title": "General home control",
+        "description": "Configure only the general home control view.",
+        "data": {
+          "view_domotics_enabled": "Open general home control view",
+          "view_domotics_path": "General home control view path",
+          "view_domotics_keywords": "General home control keywords"
+        },
+        "data_description": {
+          "view_domotics_enabled": "Disable if this view is not installed.",
+          "view_domotics_path": "Use a relative view name or a full path starting with /.",
+          "view_domotics_keywords": "One word per line. The response is checked first and the original request is used as fallback."
+        }
+      },
+      "stremio": {
+        "title": "Stremio and TVs",
+        "description": "Edit this section or return to the main menu.",
+        "menu_options": {
+          "edit_stremio": "Edit settings",
+          "init": "← Back"
+        }
+      },
+      "edit_stremio": {
+        "title": "Stremio and TVs",
+        "description": "Configure the local skill that searches movies and series through Stremio Stream Bridge before sending the request to an agent.",
+        "data": {
+          "stremio_enabled": "Enable Stremio commands",
+          "stremio_entry_id": "Stremio Stream Bridge entry",
+          "stremio_default_player": "Optional default TV",
+          "stremio_tv_aliases": "TV aliases",
+          "stremio_result_limit": "Maximum choices when asking",
+          "stremio_pending_timeout": "Seconds to answer a choice",
+          "stremio_play_ack": "Playback acknowledgement",
+          "stremio_view_enabled": "Show a Stremio view",
+          "stremio_view_path": "Stremio view"
+        },
+        "data_description": {
+          "stremio_enabled": "Detects requests such as ‘Play Matrix on the TV’ before the domotics filter.",
+          "stremio_entry_id": "Automatic works with one loaded entry. Select an entry when more than one exists.",
+          "stremio_default_player": "media_player entity. Leave empty to use Stream Bridge’s configured default.",
+          "stremio_tv_aliases": "One TV per line. Format: living, lounge = media_player.tv_living",
+          "stremio_result_limit": "Maximum titles spoken and displayed when a search is ambiguous.",
+          "stremio_pending_timeout": "How long the router accepts replies such as ‘the second one’ or season and episode.",
+          "stremio_play_ack": "Supports {title} and {target}. Example: Preparing {title} on {target}.",
+          "stremio_view_enabled": "Displays poster, status, and alternatives in View Assist.",
+          "stremio_view_path": "Use infopic, info, stremio, or an absolute dashboard path."
+        }
+      }
+    },
+    "error": {
+      "agents_must_differ": "All three destinations must use different agents.",
+      "agent_not_found": "The selected agent is no longer available.",
+      "recursive_agent": "Assist Router cannot select itself as a destination.",
+      "keywords_required": "Enter at least one home automation keyword.",
+      "ack_message_required": "Enter an immediate OpenClaw acknowledgement.",
+      "background_instruction_required": "Enter the delivery instruction for OpenClaw.",
+      "invalid_view_path": "Use a simple name such as weather or a full path starting with /. Do not use spaces.",
+      "view_keywords_required": "Enter at least one keyword for this view or disable it.",
+      "not_enough_agents": "At least three conversation agents must be loaded. Configure domotics, a general agent, and OpenClaw, restart Home Assistant, and try again.",
+      "general_openclaw_must_differ": "The general agent cannot be the same as the OpenClaw agent.",
+      "general_instruction_required": "Enter criteria that tell the general agent when to route to OpenClaw.",
+      "response_max_before_min": "Maximum time must be equal to or greater than minimum time.",
+      "invalid_media_player": "The entity must start with media_player. or be left empty.",
+      "invalid_tv_aliases": "Use one TV per line with the format alias = media_player.entity.",
+      "stremio_ack_required": "Enter a playback acknowledgement.",
+      "invalid_stremio_ack_template": "Use only {title} and {target} in the playback acknowledgement."
+    }
+  }
+}
