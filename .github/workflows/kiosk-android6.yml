@@ -1,4 +1,4 @@
-name: Kiosk Android 6 encrypted build
+name: Kiosk Android 6 safe encrypted build
 
 on:
   push:
@@ -41,16 +41,30 @@ jobs:
       - name: Apply Android 6 port
         run: python3 tools/kiosk_android6_patch.py kiosk-satellite-android6
 
+      - name: Apply Android 6 safe-start mode
+        run: python3 tools/kiosk_android6_safe_patch.py kiosk-satellite-android6
+
       - name: Resolve Flutter packages
         working-directory: kiosk-satellite-android6/app
         run: flutter pub get
+
+      - name: Harden generated plugin registration for API 23
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('kiosk-satellite-android6/app/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java')
+          text = p.read_text(encoding='utf-8')
+          text = text.replace('catch (Exception e)', 'catch (Throwable e)')
+          p.write_text(text, encoding='utf-8')
+          PY
 
       - name: Analyze source
         continue-on-error: true
         working-directory: kiosk-satellite-android6/app
         run: flutter analyze --no-fatal-infos
 
-      - name: Build API 23 APK
+      - name: Build API 23 safe APK
         working-directory: kiosk-satellite-android6/app
         run: flutter build apk --release --target-platform android-arm,android-arm64 --no-tree-shake-icons
 
@@ -58,9 +72,9 @@ jobs:
         shell: bash
         run: |
           mkdir -p private-output
-          cp kiosk-satellite-android6/app/build/app/outputs/flutter-apk/app-release.apk private-output/kiosk-satellite-android6-api23.apk
+          cp kiosk-satellite-android6/app/build/app/outputs/flutter-apk/app-release.apk private-output/kiosk-satellite-android6-safe-api23.apk
           rm -rf kiosk-satellite-android6/app/build kiosk-satellite-android6/app/.dart_tool kiosk-satellite-android6/.git
-          zip -qr private-output/kiosk-satellite-android6-source.zip kiosk-satellite-android6 \
+          zip -qr private-output/kiosk-satellite-android6-safe-source.zip kiosk-satellite-android6 \
             -x '*/android/.gradle/*' '*/android/local.properties'
           tar -C private-output -czf private-output.tar.gz .
 
@@ -92,7 +106,7 @@ jobs:
       - name: Upload encrypted result
         uses: actions/upload-artifact@v4
         with:
-          name: kiosk-android6-encrypted
+          name: kiosk-android6-safe-encrypted
           path: |
             private-output.tar.gz.enc
             artifact_pass.enc
