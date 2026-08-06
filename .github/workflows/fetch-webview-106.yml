@@ -48,10 +48,9 @@ jobs:
               request = Request(url, headers={
                   'User-Agent': UA,
                   'Accept': '*/*',
-                  # The first successful probe used a same-page referrer.
                   'Referer': referer,
               })
-              with opener.open(request, timeout=180) as response:
+              with opener.open(request, timeout=240) as response:
                   data = response.read()
                   headers = dict(response.headers)
                   final = response.geturl()
@@ -64,7 +63,6 @@ jobs:
           def extract_links(base, data):
               text = data.decode('utf-8', 'ignore')
               links = []
-              # Prefer anchors explicitly marked as APKMirror download buttons.
               for tag in re.findall(r'<a\b[^>]*>.*?</a>', text, flags=re.I | re.S):
                   href_match = re.search(r'href=["\']([^"\']+)["\']', tag, flags=re.I)
                   if not href_match:
@@ -75,23 +73,26 @@ jobs:
                   low_tag = tag.lower()
                   low_href = href.lower()
                   score = 0
-                  if 'downloadbutton' in low_tag: score += 150
-                  if 'download apk' in plain: score += 120
-                  if 'download.php' in low_href: score += 120
-                  if '/download/' in low_href: score += 80
-                  if 'forcebaseapk=true' in low_href: score += 40
+                  # The second page's final link is download.php and must beat
+                  # unrelated social/oEmbed URLs containing the word download.
+                  if 'download.php' in low_href: score += 1000
+                  if 'downloadbutton' in low_tag: score += 300
+                  if 'download apk' in plain: score += 250
+                  if '/download/' in low_href: score += 180
+                  if 'forcebaseapk=true' in low_href: score += 100
                   if score:
                       links.append((score, urljoin(base, href), plain[:120]))
-              # Some final pages expose the file URL in JavaScript rather than an anchor.
+
+              # Accept a raw URL only when it really names an APK file.
               for raw in re.findall(r'https?://[^\s"\'<>]+', text):
                   url = html.unescape(raw)
                   low = url.lower()
-                  score = 0
-                  if '.apk' in low: score += 200
-                  if 'download' in low: score += 30
-                  if 'apkmirror' in low: score += 20
-                  if score:
-                      links.append((score, url, 'raw-url'))
+                  if '.apk' not in low:
+                      continue
+                  score = 800
+                  if 'apkmirror-download' in low: score += 100
+                  links.append((score, url, 'raw-apk-url'))
+
               unique = []
               seen = set()
               for item in sorted(links, reverse=True):
@@ -154,7 +155,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: webview-fetch-debug-urllib-session
+          name: webview-fetch-debug-final-link
           path: debug-step-*.html
           if-no-files-found: ignore
           retention-days: 1
