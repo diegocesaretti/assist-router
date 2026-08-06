@@ -33,15 +33,13 @@ def patch(root: Path) -> None:
     text = text.replace("flutter_inappwebview: ^6.2.0-beta.3", "flutter_inappwebview: 6.2.0-beta.3")
     text = text.replace("intl: ^0.20.3", "intl: 0.20.2")
     pubspec.write_text(text, encoding="utf-8")
-    # Do not let the upstream Flutter 3.44 lockfile mix stable 6.1 WebView
-    # packages with the 6.2 beta platform interface on this older SDK.
     (app / "pubspec.lock").unlink(missing_ok=True)
 
     settings = app / "android/settings.gradle.kts"
     text = settings.read_text(encoding="utf-8")
     text = re.sub(
         r'id\("com\.android\.application"\) version "[^"]+" apply false',
-        'id("com.android.application") version "8.7.3" apply false',
+        'id("com.android.application") version "8.9.1" apply false',
         text,
     )
     text = re.sub(
@@ -73,7 +71,6 @@ def patch(root: Path) -> None:
     )
     app_gradle.write_text(text, encoding="utf-8")
 
-    # Flutter 3.32 predates a few widget API renames used by the current UI.
     for rel in ("lib/ui/camera_settings.dart", "lib/ui/gesture_settings.dart"):
         path = app / rel
         text = path.read_text(encoding="utf-8")
@@ -147,7 +144,7 @@ Changes made by the patcher:
 
 - Flutter 3.32.8 / Dart 3.8
 - Android API 23 minimum
-- Android Gradle Plugin 8.7.3
+- Android Gradle Plugin 8.9.1
 - Kotlin 2.1.0
 - Gradle 8.12
 - compileSdk 36 and NDK 27.0.12077973
