@@ -30,9 +30,12 @@ def patch(root: Path) -> None:
     pubspec = app / "pubspec.yaml"
     text = pubspec.read_text(encoding="utf-8")
     text = re.sub(r"(?m)^\s+sdk:\s*\^3\.12\.2\s*$", '  sdk: ">=3.8.0 <4.0.0"', text)
-    text = text.replace("flutter_inappwebview: ^6.2.0-beta.3", "flutter_inappwebview: 6.1.5")
+    text = text.replace("flutter_inappwebview: ^6.2.0-beta.3", "flutter_inappwebview: 6.2.0-beta.3")
     text = text.replace("intl: ^0.20.3", "intl: 0.20.2")
     pubspec.write_text(text, encoding="utf-8")
+    # Do not let the upstream Flutter 3.44 lockfile mix stable 6.1 WebView
+    # packages with the 6.2 beta platform interface on this older SDK.
+    (app / "pubspec.lock").unlink(missing_ok=True)
 
     settings = app / "android/settings.gradle.kts"
     text = settings.read_text(encoding="utf-8")
@@ -61,6 +64,8 @@ def patch(root: Path) -> None:
             '    id("com.android.application")\n    id("kotlin-android")\n',
             1,
         )
+    text = text.replace("compileSdk = flutter.compileSdkVersion", "compileSdk = 36")
+    text = text.replace("ndkVersion = flutter.ndkVersion", 'ndkVersion = "27.0.12077973"')
     text = text.replace("minSdk = maxOf(24, flutter.minSdkVersion)", "minSdk = 23")
     text = text.replace(
         "androidx.media3:media3-exoplayer:1.10.1",
@@ -68,12 +73,56 @@ def patch(root: Path) -> None:
     )
     app_gradle.write_text(text, encoding="utf-8")
 
-    root_gradle = app / "android/build.gradle.kts"
-    text = root_gradle.read_text(encoding="utf-8")
-    text = text.replace("compileSdk 36", "compileSdk 35")
-    text = text.replace("current < 36", "current < 35")
-    text = text.replace("android.compileSdkVersion(36)", "android.compileSdkVersion(35)")
-    root_gradle.write_text(text, encoding="utf-8")
+    # Flutter 3.32 predates a few widget API renames used by the current UI.
+    for rel in ("lib/ui/camera_settings.dart", "lib/ui/gesture_settings.dart"):
+        path = app / rel
+        text = path.read_text(encoding="utf-8")
+        text = text.replace("initialValue:", "value:")
+        path.write_text(text, encoding="utf-8")
+
+    for rel in ("lib/ui/camera_settings.dart", "lib/ui/glance_entity_picker.dart"):
+        path = app / rel
+        text = path.read_text(encoding="utf-8")
+        text = text.replace("onReorderItem:", "onReorder:")
+        path.write_text(text, encoding="utf-8")
+
+    kit = app / "lib/ui/kit.dart"
+    text = kit.read_text(encoding="utf-8")
+    old = """      RadioGroup<T>(
+        groupValue: selected,
+        onChanged: (v) => Navigator.of(context).pop(v),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final option in options)
+              RadioListTile<T>(
+                value: option.value,
+                title: Text(option.label),
+                subtitle: option.detail == null ? null : Text(option.detail!),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+          ],
+        ),
+      ),
+"""
+    new = """      Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final option in options)
+            RadioListTile<T>(
+              value: option.value,
+              groupValue: selected,
+              onChanged: (v) => Navigator.of(context).pop(v),
+              title: Text(option.label),
+              subtitle: option.detail == null ? null : Text(option.detail!),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+            ),
+        ],
+      ),
+"""
+    if old not in text:
+        raise RuntimeError("RadioGroup block not found in lib/ui/kit.dart")
+    kit.write_text(text.replace(old, new), encoding="utf-8")
 
     manifest = app / "android/app/src/main/AndroidManifest.xml"
     text = manifest.read_text(encoding="utf-8")
@@ -101,9 +150,11 @@ Changes made by the patcher:
 - Android Gradle Plugin 8.7.3
 - Kotlin 2.1.0
 - Gradle 8.12
-- flutter_inappwebview 6.1.5
+- compileSdk 36 and NDK 27.0.12077973
+- flutter_inappwebview 6.2.0-beta.3 with a fresh lockfile
 - intl 0.20.2
 - Media3 ExoPlayer 1.6.1
+- Flutter 3.32 widget API compatibility edits
 - Skia renderer forced instead of Impeller
 
 The upstream CC BY-NC-ND licence does not permit distributing a modified build.
