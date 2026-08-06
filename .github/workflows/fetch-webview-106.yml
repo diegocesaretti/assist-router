@@ -18,117 +18,113 @@ jobs:
       - name: Checkout helper
         uses: actions/checkout@v4
 
-      - name: Install parser
-        run: python3 -m pip install --quiet requests beautifulsoup4
-
       - name: Fetch exact WebView APK
         shell: bash
         run: |
           python3 - <<'PY'
           import hashlib
-          import sys
+          import html
+          import http.cookiejar
+          import re
           from pathlib import Path
           from urllib.parse import urljoin
-
-          import requests
-          from bs4 import BeautifulSoup
+          from urllib.request import (
+              Request,
+              build_opener,
+              HTTPCookieProcessor,
+              HTTPRedirectHandler,
+          )
 
           START = 'https://www.apkmirror.com/apk/google-inc/android-system-webview/android-system-webview-106-0-5249-126-release/android-system-webview-106-0-5249-126-2-android-apk-download/'
           EXPECTED = '13182d1a09508114d175c9db2bf0be2719da7a204be28140e7f8bd837d6eb788'
           OUT = Path('Android-System-WebView-106.0.5249.126-Android6-ARM.apk')
+          UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36'
 
-          session = requests.Session()
-          session.headers.update({
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-              'Accept-Language': 'en-US,en;q=0.9',
-              'Accept-Encoding': 'gzip, deflate, br',
-              'DNT': '1',
-              'Upgrade-Insecure-Requests': '1',
-          })
+          jar = http.cookiejar.CookieJar()
+          opener = build_opener(HTTPCookieProcessor(jar), HTTPRedirectHandler())
 
-          def is_apk(response, data):
-              ctype = response.headers.get('content-type', '').lower()
-              return data.startswith(b'PK\x03\x04') or 'android.package-archive' in ctype
+          def fetch(url, referer):
+              print('GET', url, flush=True)
+              request = Request(url, headers={
+                  'User-Agent': UA,
+                  'Accept': '*/*',
+                  # The first successful probe used a same-page referrer.
+                  'Referer': referer,
+              })
+              with opener.open(request, timeout=180) as response:
+                  data = response.read()
+                  headers = dict(response.headers)
+                  final = response.geturl()
+              print(' ->', final, headers.get('Content-Type'), len(data), 'cookies', len(jar), flush=True)
+              return final, headers, data
 
-          def accept_apk(response, data):
-              digest = hashlib.sha256(data).hexdigest()
-              print('APK candidate:', response.url, len(data), digest, flush=True)
-              if digest != EXPECTED:
-                  raise RuntimeError(f'APK SHA-256 mismatch: expected {EXPECTED}, got {digest}')
-              OUT.write_bytes(data)
-              print('Verified exact APK:', OUT, flush=True)
+          def is_apk(headers, data):
+              return data.startswith(b'PK\x03\x04') or 'android.package-archive' in headers.get('Content-Type', '').lower()
+
+          def extract_links(base, data):
+              text = data.decode('utf-8', 'ignore')
+              links = []
+              # Prefer anchors explicitly marked as APKMirror download buttons.
+              for tag in re.findall(r'<a\b[^>]*>.*?</a>', text, flags=re.I | re.S):
+                  href_match = re.search(r'href=["\']([^"\']+)["\']', tag, flags=re.I)
+                  if not href_match:
+                      continue
+                  href = html.unescape(href_match.group(1))
+                  plain = re.sub(r'<[^>]+>', ' ', tag)
+                  plain = html.unescape(re.sub(r'\s+', ' ', plain)).strip().lower()
+                  low_tag = tag.lower()
+                  low_href = href.lower()
+                  score = 0
+                  if 'downloadbutton' in low_tag: score += 150
+                  if 'download apk' in plain: score += 120
+                  if 'download.php' in low_href: score += 120
+                  if '/download/' in low_href: score += 80
+                  if 'forcebaseapk=true' in low_href: score += 40
+                  if score:
+                      links.append((score, urljoin(base, href), plain[:120]))
+              # Some final pages expose the file URL in JavaScript rather than an anchor.
+              for raw in re.findall(r'https?://[^\s"\'<>]+', text):
+                  url = html.unescape(raw)
+                  low = url.lower()
+                  score = 0
+                  if '.apk' in low: score += 200
+                  if 'download' in low: score += 30
+                  if 'apkmirror' in low: score += 20
+                  if score:
+                      links.append((score, url, 'raw-url'))
+              unique = []
+              seen = set()
+              for item in sorted(links, reverse=True):
+                  if item[1] in seen:
+                      continue
+                  seen.add(item[1])
+                  unique.append(item)
+              return unique
 
           current = START
-          referer = 'https://www.apkmirror.com/'
+          referer = START
           for step in range(1, 9):
-              print(f'GET step {step}: {current}', flush=True)
-              response = session.get(
-                  current,
-                  headers={'Referer': referer},
-                  timeout=120,
-                  allow_redirects=True,
-              )
-              print(' ->', response.status_code, response.url, response.headers.get('content-type'), len(response.content), flush=True)
-              response.raise_for_status()
-              data = response.content
-              if is_apk(response, data):
-                  accept_apk(response, data)
+              final, headers, data = fetch(current, referer)
+              if is_apk(headers, data):
+                  digest = hashlib.sha256(data).hexdigest()
+                  print('APK SHA256', digest, flush=True)
+                  if digest != EXPECTED:
+                      raise RuntimeError(f'hash mismatch: {digest}')
+                  OUT.write_bytes(data)
                   break
 
               Path(f'debug-step-{step}.html').write_bytes(data)
-              soup = BeautifulSoup(data, 'html.parser')
-              candidates = []
-
-              # APKMirror's normal two-page flow uses downloadButton on both pages.
-              for selector in (
-                  'a.downloadButton[href]',
-                  'a[href*="/download/"]',
-                  'a[href*="download.php"]',
-                  'a[rel="nofollow"][href]',
-              ):
-                  for anchor in soup.select(selector):
-                      href = anchor.get('href')
-                      if not href:
-                          continue
-                      absolute = urljoin(response.url, href)
-                      text = anchor.get_text(' ', strip=True).lower()
-                      low = absolute.lower()
-                      score = 0
-                      if 'downloadbutton' in (anchor.get('class') or []): score += 100
-                      if 'download.php' in low: score += 100
-                      if '/download/' in low: score += 60
-                      if 'download apk' in text: score += 80
-                      if 'forcebaseapk=true' in low: score += 40
-                      if 'apkmirror.com' in low or 'apkmirror-download.com' in low: score += 20
-                      if score:
-                          candidates.append((score, absolute))
-
-              # Also inspect meta refresh and canonical download URLs.
-              for meta in soup.select('meta[http-equiv]'):
-                  if meta.get('http-equiv', '').lower() != 'refresh':
-                      continue
-                  content = meta.get('content', '')
-                  if 'url=' in content.lower():
-                      candidates.append((90, urljoin(response.url, content.split('=', 1)[1].strip())))
-
-              unique = []
-              seen = set()
-              for score, url in sorted(candidates, reverse=True):
-                  if url in seen or url == response.url:
-                      continue
-                  seen.add(url)
-                  unique.append((score, url))
-              print('Candidates:', unique[:10], flush=True)
-              if not unique:
-                  raise RuntimeError(f'No download link found at step {step}')
-
-              referer = response.url
-              current = unique[0][1]
+              candidates = extract_links(final, data)
+              print('candidates', candidates[:8], flush=True)
+              if not candidates:
+                  raise RuntimeError(f'no APK download link found at step {step}')
+              referer = final
+              current = candidates[0][1]
           else:
-              raise RuntimeError('Download flow exceeded maximum steps')
+              raise RuntimeError('download flow exceeded maximum steps')
 
           if not OUT.exists():
-              raise RuntimeError('Exact APK was not downloaded')
+              raise RuntimeError('exact APK not downloaded')
           PY
 
       - name: Verify archive and signature
@@ -158,7 +154,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: webview-fetch-debug-session
+          name: webview-fetch-debug-urllib-session
           path: debug-step-*.html
           if-no-files-found: ignore
           retention-days: 1
