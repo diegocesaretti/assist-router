@@ -1,0 +1,100 @@
+name: Kiosk Android 6 encrypted build
+
+on:
+  push:
+    branches:
+      - tmp-kiosk-android6-ci
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout build helper
+        uses: actions/checkout@v4
+
+      - name: Checkout upstream Kiosk Satellite
+        uses: actions/checkout@v4
+        with:
+          repository: jxlarrea/kiosk-satellite
+          ref: 2026.8.2
+          path: kiosk-satellite-android6
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter 3.32.8
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.32.8'
+          channel: stable
+          cache: true
+
+      - name: Apply Android 6 port
+        run: python3 tools/kiosk_android6_patch.py kiosk-satellite-android6
+
+      - name: Resolve Flutter packages
+        working-directory: kiosk-satellite-android6/app
+        run: flutter pub get
+
+      - name: Analyze source
+        continue-on-error: true
+        working-directory: kiosk-satellite-android6/app
+        run: flutter analyze --no-fatal-infos
+
+      - name: Build API 23 APK
+        working-directory: kiosk-satellite-android6/app
+        run: flutter build apk --release --target-platform android-arm,android-arm64 --no-tree-shake-icons
+
+      - name: Package APK and private source
+        shell: bash
+        run: |
+          mkdir -p private-output
+          cp kiosk-satellite-android6/app/build/app/outputs/flutter-apk/app-release.apk private-output/kiosk-satellite-android6-api23.apk
+          rm -rf kiosk-satellite-android6/app/build kiosk-satellite-android6/app/.dart_tool kiosk-satellite-android6/.git
+          zip -qr private-output/kiosk-satellite-android6-source.zip kiosk-satellite-android6 \
+            -x '*/android/.gradle/*' '*/android/local.properties'
+          tar -C private-output -czf private-output.tar.gz .
+
+      - name: Encrypt output
+        shell: bash
+        run: |
+          cat > artifact_public.pem <<'EOF'
+          -----BEGIN PUBLIC KEY-----
+          MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAsQs40iwoe/SPcUqC7iuF
+          O5DYpc5L0U8KnlCwz01DDjQML87nKGwKx4afZXXWXlVIXy2vQuI4FCDXoRuAZKWz
+          UcaFkn67I0IxG1F4sfJRywQmaphn4EouGcy5JscdWT6aK1RyRF9Ugy8Gw4arN+dn
+          Ntnw/2dsL7OYLwjB2Qh5X7dpWUGjNvHythrpC38nQUa7wcrA8jMbIQO2WRkUkQF5
+          JYFHOr9NkukihHsyC2owK+Jj/5L5wxYzflfm5aK6gQAP+Zd0JsSB8DgDIjyDkEDa
+          ewLWhkldIVvvepB7rsFBeunZLuECW6OAOJJr4CRe+EfkR6rSd+ZDKRDg9Nfb4gmZ
+          UE8i0xW4SFIcJD9nbAt3ZD1lY06Or3etOGJ9XJv75Oa9TBRx1V7zlnb6EXu+DRZX
+          zaBfMA4IGTIdHwxTGXWvjmoYzxx1goWCERL9CtEeB89YrVoAu3yHHEhPxc4z5var
+          QL82P3+3G0ZE9CSYLNMKsGjLghC9MRD2/SiqpGUZoDZDAgMBAAE=
+          -----END PUBLIC KEY-----
+          EOF
+          openssl rand -base64 48 > artifact_pass.txt
+          openssl enc -aes-256-cbc -salt -pbkdf2 \
+            -in private-output.tar.gz -out private-output.tar.gz.enc \
+            -pass file:artifact_pass.txt
+          openssl pkeyutl -encrypt -pubin -inkey artifact_public.pem \
+            -in artifact_pass.txt -out artifact_pass.enc \
+            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256
+          rm -rf private-output private-output.tar.gz artifact_pass.txt artifact_public.pem
+
+      - name: Upload encrypted result
+        uses: actions/upload-artifact@v4
+        with:
+          name: kiosk-android6-encrypted
+          path: |
+            private-output.tar.gz.enc
+            artifact_pass.enc
+          if-no-files-found: error
+          retention-days: 1
