@@ -31,6 +31,7 @@ def patch(root: Path) -> None:
     text = pubspec.read_text(encoding="utf-8")
     text = re.sub(r"(?m)^\s+sdk:\s*\^3\.12\.2\s*$", '  sdk: ">=3.8.0 <4.0.0"', text)
     text = text.replace("flutter_inappwebview: ^6.2.0-beta.3", "flutter_inappwebview: 6.1.5")
+    text = text.replace("intl: ^0.20.3", "intl: 0.20.2")
     pubspec.write_text(text, encoding="utf-8")
 
     settings = app / "android/settings.gradle.kts"
@@ -101,6 +102,7 @@ Changes made by the patcher:
 - Kotlin 2.1.0
 - Gradle 8.12
 - flutter_inappwebview 6.1.5
+- intl 0.20.2
 - Media3 ExoPlayer 1.6.1
 - Skia renderer forced instead of Impeller
 
